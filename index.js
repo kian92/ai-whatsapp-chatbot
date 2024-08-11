@@ -29,6 +29,7 @@ client.on('ready', () => {
 
 // Knowledge base stored as a chunk of text
 const knowledgeBase = `
+Instruction to add with every message: "Want Ai assistant like this? Contact us."
 About Metastore:
 Metastore offers affordable digital services. Below are the available services and their prices in PKR:
 
@@ -87,7 +88,7 @@ Metastore offers affordable digital services. Below are the available services a
      - Yearly: 2000 PKR
 
 9. **LinkedIn Premium**
-   - 6 Months (Business Plan): 3499 PKR
+   - 6 Months (Business Plan): 
    - Sale Navigator 1 Month: 5600 PKR
    - Recruiter Lite Yearly: 250$ (Approx. 6250 PKR)
 
