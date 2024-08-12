@@ -285,8 +285,28 @@ Metastore offers affordable digital services. Below are the available services a
 `;
 
 // Function to generate a response using OpenAI
-async function generateResponse(query) {
+const userMessageHistory = {};
+
+// Function to maintain and retrieve the last 10 messages of a user
+function getLastTenMessages(senderId, newMessage) {
+    if (!userMessageHistory[senderId]) {
+        userMessageHistory[senderId] = [];
+    }
+    userMessageHistory[senderId].push(newMessage);
+    
+    // Ensure we only keep the last 10 messages
+    if (userMessageHistory[senderId].length > 10) {
+        userMessageHistory[senderId].shift();
+    }
+    
+    return userMessageHistory[senderId].join('\n');
+}
+
+// Update the generateResponse function
+async function generateResponse(query, messageHistory) {
     let prompt = `You are Metastore assistant.
+    Below are the last 10 messages exchanged with the user:
+    "${messageHistory}"
     Reply to the following query based on the knowledge base: "${query}"\nKnowledge Base: ${knowledgeBase}
     More instructions:
     Reply short and in bullets. 
@@ -300,7 +320,7 @@ async function generateResponse(query) {
 - 3 Screens UHD: 450 PKR
 - 4 Screens UHD: 650 PKR
     `;
-    
+
     // Add a guiding response if the query seems unrelated to Metastore
     prompt += "\n\nIf the query is unrelated to Metastore, politely suggest that the user explore Metastore's services or contact support.";
 
