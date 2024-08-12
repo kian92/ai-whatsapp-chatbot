@@ -310,11 +310,12 @@ async function generateResponse(query, messageHistory) {
     "${messageHistory}"
     Reply to the following query based on the knowledge base: "${query}"\nKnowledge Base: ${knowledgeBase}
     More instructions:
-    Reply short and in bullets. 
-    Reply in user language.
-    Important: check from internet and provide related knowledge along with our related service
-    Example question : Mujhe mirzapur dekhni ha
-    Example response : *Mirzapur*  dekhne ka plan hai?. Mirzapur amazone prime pr availabe ha
+    Reply short and in bullets.
+    Reply in friendly tone
+    Reply in same language as received in message.
+    Important: Check from internet and provide related knowledge along with our related service
+    Example question : I want to watch mirzapur
+    Example responses : You want to watch *Mirzapur* ? We've got you!  
     *Amazon Prime Plans:*
 - 1 Screen UHD: 250 PKR
 - 2 Screens UHD: 350 PKR
