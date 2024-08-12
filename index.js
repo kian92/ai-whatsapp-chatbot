@@ -45,8 +45,8 @@ function startBot() {
 
 function startPinging() {
     pingInterval = setInterval(() => {
-        client.sendMessage('923467467086@c.us', 'Pinging');
-        console.log('Sent "Pinging" to 923467467086@c.us');
+        client.sendMessage('923261467086@c.us', 'Pinging');
+        console.log('Sent "Pinging" to 923261467086@c.us');
     }, 240000); // 240 seconds = 4 minutes
 }
 
@@ -62,6 +62,7 @@ function showMenu() {
     - !!start: Resume the bot
     - !!ping: Start pinging 923467467086@c.us every 240 seconds
     - !!menu: Show this command menu
+    - !!remind: Please use !!remind "number" "message" "x:y" (e.g., !!remind "923261467086" "Please pay your due." "00:01").
     `;
 }
 
