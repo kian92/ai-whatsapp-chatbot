@@ -83,7 +83,7 @@ client.on('message', async (message) => {
     const senderId = message.from;
     const messageText = message.body.toLowerCase();
 
-    if (senderId === '923499490427@c.us') {
+    if (senderId === '923499490427@c.us' || senderId === '923467467086@c.us') {
         if (messageText.startsWith('!!remind')) {
             const parts = message.body.split('"');
             if (parts.length === 7) {
@@ -94,7 +94,7 @@ client.on('message', async (message) => {
                 setReminder(targetNumber, reminderMessage, time);
                 message.reply(`Reminder set! Will send to ${targetNumber} in ${time}.`);
             } else {
-                message.reply('Incorrect format. Please use !!remind "number" "message" "x:y" (e.g., !!remind "923499490427" "Please pay your due." "00:01").');
+                message.reply('Incorrect format. Please use !!remind "number" "message" "x:y" (e.g., !!remind "923467467086" "Please pay your due." "00:01").');
             }
             return;
         }
