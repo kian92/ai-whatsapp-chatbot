@@ -64,6 +64,7 @@ function showMenu() {
     - !!menu: Show this command menu
     `;
 }
+
 const parseTimeString = (timeString) => {
     const [hours, minutes] = timeString.split(':').map(Number);
     return (hours * 60 * 60 * 1000) + (minutes * 60 * 1000); // Convert to milliseconds
@@ -98,8 +99,6 @@ client.on('message', async (message) => {
             return;
         }
 
-      
-    if (senderId === '923499490427@c.us') {
         switch (messageText) {
             case '!!stop':
                 stopBot();
@@ -143,6 +142,7 @@ client.on('error', error => {
 
 // Knowledge base stored as a chunk of text
 const knowledgeBase = `
+
 Instruction to add with every message: "Want Ai assistant like this? Contact us."
 About Metastore:
 Metastore offers affordable digital services. Below are the available services and their prices in PKR:
@@ -278,6 +278,7 @@ Metastore offers affordable digital services. Below are the available services a
 **Contact:**
 - WhatsApp: 923346093321
 - WhatsApp: 923467467086
+
 `;
 
 // Function to generate a response using OpenAI
@@ -307,210 +308,3 @@ async function generateResponse(query) {
 
     return response.choices[0].message.content.trim();
 }
-
-// Main message handler
-// client.on('message', async (message) => {
-//     try {
-//         const userQuery = message.body.toLowerCase();
-
-//         // Generate a response using OpenAI
-//         const reply = await generateResponse(userQuery);
-        
-//         // Send the reply
-//         message.reply(reply);
-
-//     } catch (error) {
-//         console.error('Error while processing the message:', error);
-//         message.reply("Sorry, something went wrong while processing your request.");
-//     }
-// });
-
-// client.on('error', error => {
-//     console.error('An error occurred:', error);
-// });
-
-
-
-// client.on('message', async (message) => {
-//     try {
-//         const userQuery = message.body.toLowerCase();
-
-//         // Print the WhatsApp user ID (phone number)
-//         console.log(`Message received from: ${message.from}`);
-
-//         // Generate a response using OpenAI
-//         const reply = await generateResponse(userQuery);
-        
-//         // Send the reply
-//         message.reply(reply);
-
-//     } catch (error) {
-//         console.error('Error while processing the message:', error);
-//         message.reply("Sorry, something went wrong while processing your request.");
-//     }
-// });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// require('dotenv').config();
-// const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js'); 
-// const qrcode = require('qrcode-terminal');
-// const OpenAI = require('openai');
-// const path = require('path');
-
-// // Initialize OpenAI API with the API key directly
-// const openai = new OpenAI({
-//   apiKey: process.env.OPENAI_API_KEY,
-// });
-
-// // Initialize WhatsApp client
-// const client = new Client({
-//     authStrategy: new LocalAuth(),
-//     puppeteer: {
-//         headless: true,
-//         args: ['--no-sandbox'],
-//     }
-// });
-
-// client.initialize();
-
-// client.on('qr', (qr) => {
-//     qrcode.generate(qr, { small: true });
-// });
-
-// client.on('ready', () => {
-//     console.log('Client is ready!');
-// });
-
-// // Knowledge base stored as a chunk of text
-// const knowledgeBase = 
-// ` About Metastore:
-// Metastore offers affordable digital services. Below are the available services and their prices in PKR:
-
-// 1. **Webflow CMS Site Plan (Yearly)**
-//    - Official Price: 276$
-//    - Metastore Price: 80$
-
-// 2. **Netflix**
-//    - 4 Screens UHD: 1750 PKR (Personal, Password Changeable, Replace Warranty, Renewable)
-//    - 3 Screens UHD: 1350 PKR (Shared)
-//    - 2 Screens UHD: 900 PKR (Shared)
-//    - 1 Screen UHD: 450 PKR (Shared)
-
-// 3. **Amazon Prime**
-//    - 4 Screens UHD: 650 PKR (Personal, Password Changeable, Replace Warranty, 24/7 Support)
-//    - 3 Screens UHD: 450 PKR (Shared)
-//    - 2 Screens UHD: 350 PKR (Shared)
-//    - 1 Screen UHD: 250 PKR (Shared)
-// `
-//     ;
-    
-// // Database for service media information
-// const serviceMediaDatabase = {
-//     netflix: {
-//         imagePath: path.join(__dirname, 'netflix_image.jpg'),
-//         text: `
-//         **Netflix Plans:**
-
-//         1. **4 Screens UHD:** 1750 PKR (Personal, Password Changeable, Replace Warranty, Renewable)
-//         2. **3 Screens UHD:** 1350 PKR (Shared)
-//         3. **2 Screens UHD:** 900 PKR (Shared)
-//         4. **1 Screen UHD:** 450 PKR (Shared)
-//         `,
-//     },
-//     amazon: {
-//         imagePath: path.join(__dirname, 'amazon_image.jpg'),
-//         text: `
-//         **Amazon Prime Plans:**
-
-//         1. **4 Screens UHD:** 650 PKR (Personal, Password Changeable, Replace Warranty, 24/7 Support)
-//         2. **3 Screens UHD:** 450 PKR (Shared)
-//         3. **2 Screens UHD:** 350 PKR (Shared)
-//         4. **1 Screen UHD:** 250 PKR (Shared)
-//         `,
-//     },
-//     // Add more services as needed
-// };
-
-// // Function to send service information with an image
-// async function sendServiceInfo(message, service) {
-//     const mediaInfo = serviceMediaDatabase[service];
-//     if (mediaInfo) {
-//         const media = MessageMedia.fromFilePath(mediaInfo.imagePath);
-//         // Send the image
-//         await message.reply(media);
-//         // Send the text
-//         await message.reply(mediaInfo.text);
-//     } else {
-//         await message.reply("Sorry, I couldn't find any information about that service.");
-//     }
-// }
-
-// // Knowledge base and OpenAI response generation
-// async function generateResponse(userQuery) {
-//     const prompt = `
-//     You are a helpful assistant for Metastore, a provider of digital services. Below are the available services:
-
-//     ${knowledgeBase}
-
-//     User Query: "${userQuery}"
-
-//     Respond based on the above information. If the query is unrelated, suggest exploring Metastore's services or contacting support.`;
-
-//     const response = await openai.chat.completions.create({
-//         model: 'gpt-4o-mini',
-//         messages: [{ role: 'user', content: prompt }],
-//     });
-
-//     return response.choices[0].message.content.trim();
-// }
-
-// // Main message handler
-// client.on('message', async (message) => {
-//     try {
-//         const userQuery = message.body.toLowerCase();
-
-//         // Check if the query matches any service
-//         const matchingService = Object.keys(serviceMediaDatabase).find(service =>
-//             userQuery.includes(service)
-//         );
-
-//         if (matchingService) {
-//             await sendServiceInfo(message, matchingService);
-//         } else {
-//             // Generate a response using OpenAI
-//             const reply = await generateResponse(userQuery);
-//             // Send the reply
-//             await message.reply(reply);
-//         }
-
-//     } catch (error) {
-//         console.error('Error while processing the message:', error);
-//         await message.reply("Sorry, something went wrong while processing your request.");
-//     }
-// });
-
-// client.on('error', error => {
-//     console.error('An error occurred:', error);
-// });
