@@ -64,10 +64,24 @@ function showMenu() {
     - !!menu: Show this command menu
     `;
 }
+const parseTimeString = (timeString) => {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return (hours * 60 * 60 * 1000) + (minutes * 60 * 1000); // Convert to milliseconds
+};
+
+const setReminder = (number, message, time) => {
+    const delay = parseTimeString(time);
+
+    setTimeout(() => {
+        client.sendMessage(number + '@c.us', message);
+        console.log(`Reminder sent to ${number}: ${message}`);
+    }, delay);
+};
 
 client.on('message', async (message) => {
     const senderId = message.from;
     const messageText = message.body.toLowerCase();
+
     if (senderId === '923499490427@c.us') {
         if (messageText.startsWith('!!remind')) {
             const parts = message.body.split('"');
@@ -84,6 +98,7 @@ client.on('message', async (message) => {
             return;
         }
 
+      
     if (senderId === '923499490427@c.us') {
         switch (messageText) {
             case '!!stop':
