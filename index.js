@@ -297,24 +297,27 @@ async function generateResponse(query) {
 // client.on('error', error => {
 //     console.error('An error occurred:', error);
 // });
-client.on('message', async (message) => {
-    try {
-        const userQuery = message.body.toLowerCase();
 
-        // Print the WhatsApp user ID (phone number)
-        console.log(`Message received from: ${message.from}`);
 
-        // Generate a response using OpenAI
-        const reply = await generateResponse(userQuery);
+
+// client.on('message', async (message) => {
+//     try {
+//         const userQuery = message.body.toLowerCase();
+
+//         // Print the WhatsApp user ID (phone number)
+//         console.log(`Message received from: ${message.from}`);
+
+//         // Generate a response using OpenAI
+//         const reply = await generateResponse(userQuery);
         
-        // Send the reply
-        message.reply(reply);
+//         // Send the reply
+//         message.reply(reply);
 
-    } catch (error) {
-        console.error('Error while processing the message:', error);
-        message.reply("Sorry, something went wrong while processing your request.");
-    }
-});
+//     } catch (error) {
+//         console.error('Error while processing the message:', error);
+//         message.reply("Sorry, something went wrong while processing your request.");
+//     }
+// });
 
 
 
