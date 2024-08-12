@@ -143,7 +143,10 @@ client.on('error', error => {
 // Knowledge base stored as a chunk of text
 const knowledgeBase = `
 
-Instruction to add with every message: "Want Ai assistant like this? Contact us."
+Instruction to add with every message: "Want Ai assistant like this? Contact us.
+- WhatsApp: 923346093321
+- WhatsApp: 923467467086 "
+
 About Metastore:
 Metastore offers affordable digital services. Below are the available services and their prices in PKR:
 
