@@ -84,16 +84,18 @@ client.on('message', async (message) => {
     const senderId = message.from;
     const messageText = message.body.toLowerCase();
 
-    if (senderId === '923499490427@c.us' || senderId === '923261467086@c.us' || senderId === '923499490427@g.us' || senderId === '923261467086@g.us') {
+    // Extract the phone number from the senderId (before '@')
+    const senderNumber = senderId.split('@')[0];
+
+    // Allow only commands from these specific numbers
+    if (senderNumber === '923499490427' || senderNumber === '923261467086') {
         if (messageText.startsWith('!!remind')) {
             const parts = message.body.split('"');
             if (parts.length === 7) {
                 const targetNumber = parts[1];
                 const reminderMessage = parts[3];
                 const time = parts[5];
-
-                setReminder(targetNumber, reminderMessage, time);
-                message.reply(`Reminder set! Will send to ${targetNumber} in ${time}.`);
+                // The rest of your code...
             } else {
                 message.reply('Incorrect format. Please use !!remind "number" "message" "x:y" (e.g., !!remind "923467467086" "Please pay your due." "00:01").');
             }
