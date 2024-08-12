@@ -84,7 +84,7 @@ client.on('message', async (message) => {
     const senderId = message.from;
     const messageText = message.body.toLowerCase();
 
-    if (senderId === '923499490427@c.us' || senderId === '923467467086@c.us') {
+    if (senderId === '923499490427@c.us' || senderId === '923261467086@c.us') {
         if (messageText.startsWith('!!remind')) {
             const parts = message.body.split('"');
             if (parts.length === 7) {
