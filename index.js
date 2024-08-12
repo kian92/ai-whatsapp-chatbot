@@ -16,6 +16,7 @@ const client = new Client({
         args: ['--no-sandbox'],
     }
 });
+// Existing code...
 
 client.initialize();
 
@@ -26,6 +27,88 @@ client.on('qr', (qr) => {
 client.on('ready', () => {
     console.log('Client is ready!');
 });
+
+//--------------------------------
+// Your new code starts here
+let isBotActive = true;
+let pingInterval;
+
+function stopBot() {
+    isBotActive = false;
+    console.log('Bot has been paused.');
+}
+
+function startBot() {
+    isBotActive = true;
+    console.log('Bot is now active.');
+}
+
+function startPinging() {
+    pingInterval = setInterval(() => {
+        client.sendMessage('923467467086@c.us', 'Pinging');
+        console.log('Sent "Pinging" to 923467467086@c.us');
+    }, 240000); // 240 seconds = 4 minutes
+}
+
+function stopPinging() {
+    clearInterval(pingInterval);
+    console.log('Stopped pinging.');
+}
+
+function showMenu() {
+    return `
+    *Commands Menu:*
+    - !!stop: Pause the bot
+    - !!start: Resume the bot
+    - !!ping: Start pinging 923467467086@c.us every 240 seconds
+    - !!menu: Show this command menu
+    `;
+}
+
+client.on('message', async (message) => {
+    const senderId = message.from;
+    const messageText = message.body.toLowerCase();
+
+    if (senderId === '923499490427@c.us') {
+        switch (messageText) {
+            case '!!stop':
+                stopBot();
+                message.reply('Bot has been paused.');
+                return;
+            case '!!start':
+                startBot();
+                message.reply('Bot is now active.');
+                return;
+            case '!!ping':
+                startPinging();
+                message.reply('Started pinging 923467467086@c.us every 240 seconds.');
+                return;
+            case '!!menu':
+                message.reply(showMenu());
+                return;
+            default:
+                break;
+        }
+    }
+
+    if (isBotActive) {
+        try {
+            const userQuery = message.body.toLowerCase();
+            const reply = await generateResponse(userQuery);
+            message.reply(reply);
+        } catch (error) {
+            console.error('Error while processing the message:', error);
+            message.reply("Sorry, something went wrong while processing your request.");
+        }
+    } else {
+        console.log('Bot is paused, no response sent.');
+    }
+});
+
+client.on('error', error => {
+    console.error('An error occurred:', error);
+});
+//--------------------------------
 
 // Knowledge base stored as a chunk of text
 const knowledgeBase = `
