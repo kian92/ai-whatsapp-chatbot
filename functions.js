@@ -44,6 +44,7 @@ function stopPinging(number) {
 
 
 
+
 function parseTimeString(timeString) {
     const [hours, minutes] = timeString.split(':').map(Number);
     return (hours * 60 * 60 * 1000) + (minutes * 60 * 1000); // Convert to milliseconds
@@ -141,6 +142,16 @@ function handleCommand(client, openai, message, senderNumber, isAdmin, isModerat
                     }
                     break;
 
+                case messageText.startsWith('!!stop'):
+                    stopBot();
+                    message.reply('Bot has been paused.');
+                    break;
+
+                case messageText.startsWith('!!start'):
+                    startBot();
+                    message.reply('Bot is now active.');
+                    break;
+
                 case isAdmin && messageText.startsWith('!!addmoderator'):
                     const newModerator = message.body.split('"')[1];
                     if (newModerator) {
@@ -194,37 +205,6 @@ function handleCommand(client, openai, message, senderNumber, isAdmin, isModerat
     }
 }
 
-
-// Show different menus for Admins and Moderators
-function showMenu(isAdmin) {
-    if (isAdmin) {
-        return `
-        *Commands Menu (Admin):*
-        - !!stop: Pause the bot
-        - !!start: Resume the bot
-        - !!ping "number": Start pinging the specified number every 240 seconds
-        - !!pingstop "number": Stop pinging the specified number
-        - !!menu: Show this command menu
-        - !!remind "number" "message" "x:y": Set a reminder for the specified number
-        - !!knowledgebase "name": Switch to the specified knowledge base
-        - !!checkmoderators: List all current moderators
-
-        - !!addmoderator "number": Add a moderator (Admin only)
-        - !!removemoderator "number": Remove a moderator (Admin only)
-        `;
-    } else {
-        return `
-        *Commands Menu (Moderator):*
-        - !!stop: Pause the bot
-        - !!start: Resume the bot
-        - !!ping "number": Start pinging the specified number every 240 seconds
-        - !!pingstop "number": Stop pinging the specified number
-        - !!menu: Show this command menu
-        - !!remind "number" "message" "x:y": Set a reminder for the specified number
-        - !!knowledgebase "name": Switch to the specified knowledge base
-        `;
-    }
-}
 
 // Export the functions to be used in index.js
 module.exports = {
