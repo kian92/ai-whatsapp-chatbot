@@ -90,6 +90,7 @@ function checkModerators() {
 
 
 // Handle commands and messages based on user input
+// Handle commands and messages based on user input
 function handleCommand(client, openai, message, senderNumber, isAdmin, isModerator, isBotActive) {
     const messageText = message.body.toLowerCase();
 
@@ -205,6 +206,37 @@ function handleCommand(client, openai, message, senderNumber, isAdmin, isModerat
     }
 }
 
+
+// Show different menus for Admins and Moderators
+function showMenu(isAdmin) {
+    if (isAdmin) {
+        return `
+        *Commands Menu (Admin):*
+        - !!stop: Pause the bot
+        - !!start: Resume the bot
+        - !!ping "number": Start pinging the specified number every 240 seconds
+        - !!pingstop "number": Stop pinging the specified number
+        - !!menu: Show this command menu
+        - !!remind "number" "message" "x:y": Set a reminder for the specified number
+        - !!knowledgebase "name": Switch to the specified knowledge base
+        - !!checkmoderators: List all current moderators
+
+        - !!addmoderator "number": Add a moderator (Admin only)
+        - !!removemoderator "number": Remove a moderator (Admin only)
+        `;
+    } else {
+        return `
+        *Commands Menu (Moderator):*
+        - !!stop: Pause the bot
+        - !!start: Resume the bot
+        - !!ping "number": Start pinging the specified number every 240 seconds
+        - !!pingstop "number": Stop pinging the specified number
+        - !!menu: Show this command menu
+        - !!remind "number" "message" "x:y": Set a reminder for the specified number
+        - !!knowledgebase "name": Switch to the specified knowledge base
+        `;
+    }
+}
 
 // Export the functions to be used in index.js
 module.exports = {
