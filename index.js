@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('fs'); // Required to read files
 const readline = require('readline');
-const { Client, LocalAuth } = require('whatsapp-web.js'); 
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const OpenAI = require('openai');
 
@@ -19,31 +19,26 @@ const client = new Client({
     }
 });
 
-// Prompt user for the knowledge base name
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
 let knowledgeBase = ''; // Variable to store the knowledge base content
+const defaultKnowledgeBase = 'default'; // Default knowledge base file name
+let currentKnowledgeBase = defaultKnowledgeBase; // Track the current knowledge base in use
 
-// Prompt for the knowledge base file name
-rl.question('Please provide the knowledge base name: ', (kbName) => {
+// Function to load the knowledge base
+function loadKnowledgeBase(kbName) {
     const kbFilePath = `${kbName}.txt`;
-    
-    // Check if the file exists
     if (fs.existsSync(kbFilePath)) {
-        // Read the knowledge base from the file
         knowledgeBase = fs.readFileSync(kbFilePath, 'utf8');
+        currentKnowledgeBase = kbName;
         console.log(`Loaded knowledge base from ${kbFilePath}`);
+        return true;
     } else {
         console.error(`Knowledge base file "${kbFilePath}" not found!`);
-        process.exit(1); // Exit the program if the file doesn't exist
+        return false;
     }
+}
 
-    rl.close(); // Close the readline interface and start the WhatsApp client
-    client.initialize();
-});
+// Load the default knowledge base at startup
+loadKnowledgeBase(defaultKnowledgeBase);
 
 client.on('qr', (qr) => {
     qrcode.generate(qr, { small: true });
@@ -87,6 +82,7 @@ function showMenu() {
     - !!ping: Start pinging 923467467086@c.us every 240 seconds
     - !!menu: Show this command menu
     - !!remind: Please use !!remind "number" "message" "x:y" (e.g., !!remind "923261467086" "Please pay your due." "00:01").
+    - !!knowledgebase "name": Switch to the specified knowledge base.
     `;
 }
 
@@ -122,6 +118,20 @@ client.on('message', async (message) => {
                 setReminder(targetNumber, reminderMessage, time);
             } else {
                 message.reply('Incorrect format. Please use !!remind "number" "message" "x:y" (e.g., !!remind "923467467086" "Please pay your due." "00:01").');
+            }
+            return;
+        }
+
+        if (messageText.startsWith('!!knowledgebase')) {
+            const kbName = message.body.split('"')[1];
+            if (kbName) {
+                if (loadKnowledgeBase(kbName)) {
+                    message.reply(`Switched to knowledge base "${kbName}".`);
+                } else {
+                    message.reply(`Knowledge base "${kbName}" does not exist.`);
+                }
+            } else {
+                message.reply('Please specify the knowledge base name like !!knowledgebase "name".');
             }
             return;
         }
@@ -168,10 +178,12 @@ client.on('error', error => {
 // Function to generate a response using OpenAI
 async function generateResponse(userQuery, knowledgeBase) {
     // Combine user query with the knowledge base content
-    const prompt = `KnowledgeBase:\n${knowledgeBase}\n\nUser Query: ${userQuery}\n\nResponse:`;
+    const prompt = `
+    
+    KnowledgeBase:\n${knowledgeBase}\n\nUser Query: ${userQuery}\n\nResponse:`;
 
     const response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
     });
 
@@ -194,6 +206,51 @@ function getLastTenMessages(senderId, newMessage) {
     
     return userMessageHistory[senderId].join('\n');
 }
+
+client.initialize();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
