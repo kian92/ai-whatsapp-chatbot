@@ -1,9 +1,8 @@
 require('dotenv').config();
-const fs = require('fs'); // Required to read files
-const readline = require('readline');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const OpenAI = require('openai');
+const functions = require('./functions');
 
 // Initialize OpenAI API with the API key directly
 const openai = new OpenAI({
@@ -19,26 +18,11 @@ const client = new Client({
     }
 });
 
-let knowledgeBase = ''; // Variable to store the knowledge base content
-const defaultKnowledgeBase = 'default'; // Default knowledge base file name
-let currentKnowledgeBase = defaultKnowledgeBase; // Track the current knowledge base in use
-
-// Function to load the knowledge base
-function loadKnowledgeBase(kbName) {
-    const kbFilePath = `${kbName}.txt`;
-    if (fs.existsSync(kbFilePath)) {
-        knowledgeBase = fs.readFileSync(kbFilePath, 'utf8');
-        currentKnowledgeBase = kbName;
-        console.log(`Loaded knowledge base from ${kbFilePath}`);
-        return true;
-    } else {
-        console.error(`Knowledge base file "${kbFilePath}" not found!`);
-        return false;
-    }
-}
+const adminNumber = '923499490427';
 
 // Load the default knowledge base at startup
-loadKnowledgeBase(defaultKnowledgeBase);
+functions.loadKnowledgeBase('default');
+functions.addModerator(adminNumber); // Initialize the admin as a moderator
 
 client.on('qr', (qr) => {
     qrcode.generate(qr, { small: true });
@@ -48,156 +32,21 @@ client.on('ready', () => {
     console.log('Client is ready!');
 });
 
-// Define Super Admin and Moderators
-const superAdmin = '923499490427';
-let moderators = [];
+let isBotActive = true;
 
-// Function to check if a number is an admin
-function isAdmin(number) {
-    return number === superAdmin || moderators.includes(number);
-}
-
-// Function to add a moderator
-function addModerator(number) {
-    if (!moderators.includes(number)) {
-        moderators.push(number);
-        console.log(`Added ${number} as a moderator.`);
-    }
-}
-
-// Function to remove a moderator
-function removeModerator(number) {
-    moderators = moderators.filter(mod => mod !== number);
-    console.log(`Removed ${number} as a moderator.`);
-}
-
-// Pinging related changes
-let pingIntervals = {};
-
-function startPinging(number) {
-    if (pingIntervals[number]) {
-        clearInterval(pingIntervals[number]);
-    }
-    pingIntervals[number] = setInterval(() => {
-        client.sendMessage(number + '@c.us', 'Pinging');
-        console.log(`Sent "Pinging" to ${number}@c.us`);
-    }, 240000); // 240 seconds = 4 minutes
-}
-
-function stopPinging(number) {
-    if (pingIntervals[number]) {
-        clearInterval(pingIntervals[number]);
-        delete pingIntervals[number];
-        console.log(`Stopped pinging ${number}`);
-    }
-}
-
-client.on('message', (message) => {
+client.on('message', async (message) => {
     const senderId = message.from;
-    const messageText = message.body.toLowerCase();
-
-    // Extract the phone number from the senderId (before '@')
     const senderNumber = senderId.split('@')[0];
 
-    // Only Super Admin can add/remove moderators
-    if (senderNumber === superAdmin) {
-        if (messageText.startsWith('!!addmoderator')) {
-            const modNumber = message.body.split('"')[1];
-            if (modNumber) {
-                addModerator(modNumber);
-                message.reply(`${modNumber} has been added as a moderator.`);
-            } else {
-                message.reply('Please specify the number to add as a moderator like !!addmoderator "number".');
-            }
-            return;
-        }
+    const isAdmin = senderNumber === adminNumber;
+    const isModerator = functions.isModerator(senderNumber);
 
-        if (messageText.startsWith('!!removemoderator')) {
-            const modNumber = message.body.split('"')[1];
-            if (modNumber) {
-                removeModerator(modNumber);
-                message.reply(`${modNumber} has been removed from moderators.`);
-            } else {
-                message.reply('Please specify the number to remove as a moderator like !!removemoderator "number".');
-            }
-            return;
-        }
-    }
-
-    // Allow only admins to control pinging
-    if (isAdmin(senderNumber)) {
-        if (messageText.startsWith('!!ping')) {
-            const targetNumber = message.body.split('"')[1];
-            if (targetNumber) {
-                startPinging(targetNumber);
-                message.reply(`Started pinging ${targetNumber}@c.us every 240 seconds.`);
-            } else {
-                message.reply('Please specify the number to ping like !!ping "number".');
-            }
-            return;
-        }
-
-        if (messageText.startsWith('!!pingstop')) {
-            const targetNumber = message.body.split('"')[1];
-            if (targetNumber) {
-                stopPinging(targetNumber);
-                message.reply(`Stopped pinging ${targetNumber}.`);
-            } else {
-                message.reply('Please specify the number to stop pinging like !!pingstop "number".');
-            }
-            return;
-        }
-    }
-
-    if (isBotActive) {
-        try {
-            const userQuery = message.body.toLowerCase();
-            const reply = await generateResponse(userQuery, knowledgeBase);
-            message.reply(reply);
-        } catch (error) {
-            console.error('Error while processing the message:', error);
-            message.reply("Sorry, something went wrong while processing your request.");
-        }
-    } else {
-        console.log('Bot is paused, no response sent.');
-    }
+    functions.handleCommand(client, openai, message, senderNumber, isAdmin, isModerator, isBotActive);
 });
 
 client.on('error', error => {
     console.error('An error occurred:', error);
 });
-
-// Function to generate a response using OpenAI
-async function generateResponse(userQuery, knowledgeBase) {
-    // Combine user query with the knowledge base content
-    const prompt = `
-    
-    KnowledgeBase:\n${knowledgeBase}\n\nUser Query: ${userQuery}\n\nResponse:`;
-
-    const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-    });
-
-    return response.choices[0].message.content.trim();
-}
-
-// User message history to track last 10 messages
-const userMessageHistory = {};
-
-function getLastTenMessages(senderId, newMessage) {
-    if (!userMessageHistory[senderId]) {
-        userMessageHistory[senderId] = [];
-    }
-    userMessageHistory[senderId].push(newMessage);
-    
-    // Ensure we only keep the last 10 messages
-    if (userMessageHistory[senderId].length > 10) {
-        userMessageHistory[senderId].shift();
-    }
-    
-    return userMessageHistory[senderId].join('\n');
-}
 
 client.initialize();
 
@@ -210,10 +59,7 @@ client.initialize();
 
 
 
-
-
-
-
+// Older versions are below.
 
 
 
