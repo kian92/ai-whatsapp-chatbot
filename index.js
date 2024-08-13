@@ -29,6 +29,9 @@ function startBot() {
     console.log('Bot is now active.');
 }
 
+// Load the default knowledge base on startup
+// functions.loadKnowledgeBase('default');
+
 client.on('qr', (qr) => {
     qrcode.generate(qr, { small: true });
 });
@@ -72,8 +75,6 @@ client.on('error', (error) => {
 });
 
 client.initialize();
-
-
 
 
 

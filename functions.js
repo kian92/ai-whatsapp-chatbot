@@ -18,6 +18,9 @@ function loadKnowledgeBase(kbName) {
     }
 }
 
+// Load the default knowledge base at module initialization
+loadKnowledgeBase(currentKnowledgeBase);
+
 function startPinging(client, number) {
     const fullNumber = `${number}@c.us`;
     if (!pingIntervals[fullNumber]) {
