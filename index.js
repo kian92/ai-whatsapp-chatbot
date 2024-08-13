@@ -4,12 +4,10 @@ const qrcode = require('qrcode-terminal');
 const OpenAI = require('openai');
 const functions = require('./functions');
 
-// Initialize OpenAI API with the API key directly
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Initialize WhatsApp client
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -20,9 +18,7 @@ const client = new Client({
 
 const adminNumber = '923499490427';
 
-// Load the default knowledge base at startup
-functions.loadKnowledgeBase('default');
-functions.addModerator(adminNumber); // Initialize the admin as a moderator
+let isBotActive = true; // Control the bot's active state
 
 client.on('qr', (qr) => {
     qrcode.generate(qr, { small: true });
@@ -32,8 +28,6 @@ client.on('ready', () => {
     console.log('Client is ready!');
 });
 
-let isBotActive = true;
-
 client.on('message', async (message) => {
     const senderId = message.from;
     const senderNumber = senderId.split('@')[0];
@@ -41,19 +35,19 @@ client.on('message', async (message) => {
     const isAdmin = senderNumber === adminNumber;
     const isModerator = functions.isModerator(senderNumber);
 
-    functions.handleCommand(client, openai, message, senderNumber, isAdmin, isModerator, isBotActive);
+    // Only process commands if the bot is active, or it's an admin trying to start/stop the bot
+    if (isBotActive || message.body.toLowerCase().startsWith('!!start') || message.body.toLowerCase().startsWith('!!stop')) {
+        functions.handleCommand(client, openai, message, senderNumber, isAdmin, isModerator);
+    } else {
+        console.log('Bot is paused, no response sent.');
+    }
 });
 
-client.on('error', error => {
+client.on('error', (error) => {
     console.error('An error occurred:', error);
 });
 
 client.initialize();
-
-
-
-
-
 
 
 

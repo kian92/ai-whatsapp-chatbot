@@ -5,6 +5,8 @@ let currentKnowledgeBase = 'default'; // Track the current knowledge base in use
 const pingIntervals = {}; // Store ping intervals per number
 const moderators = new Set(); // Set to store moderators
 
+let isBotActive = true; // Initial state of the bot
+
 function loadKnowledgeBase(kbName) {
     const kbFilePath = `${kbName}.txt`;
     if (fs.existsSync(kbFilePath)) {
@@ -32,18 +34,15 @@ function startPinging(client, number) {
 }
 
 function stopPinging(number) {
-    const fullNumber = `${number}@c.us`;
+    const fullNumber = `${number}@c.us`; // Format the number correctly
     if (pingIntervals[fullNumber]) {
-        clearInterval(pingIntervals[fullNumber]);
-        delete pingIntervals[fullNumber];
+        clearInterval(pingIntervals[fullNumber]); // Clear the interval
+        delete pingIntervals[fullNumber]; // Remove the interval from the object
         console.log(`Stopped pinging ${fullNumber}`);
     } else {
         console.log(`No active pinging found for ${fullNumber}`);
     }
 }
-
-
-
 
 function parseTimeString(timeString) {
     const [hours, minutes] = timeString.split(':').map(Number);
@@ -87,9 +86,16 @@ function checkModerators() {
     return Array.from(moderators);
 }
 
+function stopBot() {
+    isBotActive = false;
+    console.log('Bot has been paused.');
+}
 
+function startBot() {
+    isBotActive = true;
+    console.log('Bot is now active.');
+}
 
-// Handle commands and messages based on user input
 // Handle commands and messages based on user input
 function handleCommand(client, openai, message, senderNumber, isAdmin, isModerator, isBotActive) {
     const messageText = message.body.toLowerCase();
@@ -133,7 +139,7 @@ function handleCommand(client, openai, message, senderNumber, isAdmin, isModerat
                     }
                     break;
 
-                case messageText.startsWith('!!pingstop'):
+                case messageText.startsWith('!!stop-ping'):
                     const targetNumberPingStop = message.body.split('"')[1];
                     if (targetNumberPingStop) {
                         stopPinging(targetNumberPingStop);
@@ -206,7 +212,6 @@ function handleCommand(client, openai, message, senderNumber, isAdmin, isModerat
     }
 }
 
-
 // Show different menus for Admins and Moderators
 function showMenu(isAdmin) {
     if (isAdmin) {
@@ -215,7 +220,7 @@ function showMenu(isAdmin) {
         - !!stop: Pause the bot
         - !!start: Resume the bot
         - !!ping "number": Start pinging the specified number every 240 seconds
-        - !!pingstop "number": Stop pinging the specified number
+        - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
         - !!remind "number" "message" "x:y": Set a reminder for the specified number
         - !!knowledgebase "name": Switch to the specified knowledge base
@@ -230,7 +235,7 @@ function showMenu(isAdmin) {
         - !!stop: Pause the bot
         - !!start: Resume the bot
         - !!ping "number": Start pinging the specified number every 240 seconds
-        - !!pingstop "number": Stop pinging the specified number
+        - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
         - !!remind "number" "message" "x:y": Set a reminder for the specified number
         - !!knowledgebase "name": Switch to the specified knowledge base
@@ -252,5 +257,7 @@ module.exports = {
     isModerator,
     checkModerators,
     handleCommand,
+    stopBot,      // Exporting stopBot
+    startBot,     // Exporting startBot
     moderators
 };
