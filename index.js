@@ -3,6 +3,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const OpenAI = require('openai');
 const functions = require('./functions');
+const fs = require('fs'); // To handle file operations
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -62,6 +63,77 @@ client.on('message', async (message) => {
         return;
     }
 
+    // Handle file uploads
+    if (isAdmin && message.hasMedia && messageText.startsWith('!!kbadd')) {
+        const kbName = messageText.split(' ')[1]; // Extract the knowledge base name
+        if (!kbName) {
+            message.reply('Please specify the name for the knowledge base file. Usage: !!kbadd [filename]');
+            return;
+        }
+
+        const media = await message.downloadMedia(); // Download the media file
+        const filePath = `./${kbName}.txt`; // Define where to save the file
+
+        // Save the file
+        fs.writeFile(filePath, media.data, { encoding: 'base64' }, (err) => {
+            if (err) {
+                console.error('Error saving knowledge base file:', err);
+                message.reply('Failed to save the knowledge base file.');
+            } else {
+                console.log(`Saved knowledge base as ${filePath}`);
+                message.reply(`Knowledge base file ${kbName}.txt has been saved successfully.`);
+            }
+        });
+
+        return;
+    }
+
+    // Handle file deletion
+    if (isAdmin && messageText.startsWith('!!deletekb')) {
+        const kbName = messageText.split(' ')[1]; // Extract the knowledge base name
+        if (!kbName) {
+            message.reply('Please specify the name of the knowledge base file to delete. Usage: !!deletekb [filename]');
+            return;
+        }
+
+        const filePath = `./${kbName}.txt`; // Define the file path
+        if (fs.existsSync(filePath)) {
+            fs.unlink(filePath, (err) => {
+                if (err) {
+                    console.error('Error deleting knowledge base file:', err);
+                    message.reply('Failed to delete the knowledge base file.');
+                } else {
+                    console.log(`Deleted knowledge base file ${filePath}`);
+                    message.reply(`Knowledge base file ${kbName}.txt has been deleted successfully.`);
+                }
+            });
+        } else {
+            message.reply(`File ${kbName}.txt does not exist.`);
+        }
+
+        return;
+    }
+
+    // Handle listing all .txt files in the directory
+    if (isAdmin && messageText.startsWith('!!listkb')) {
+        fs.readdir('./', (err, files) => {
+            if (err) {
+                console.error('Error listing knowledge base files:', err);
+                message.reply('Failed to list knowledge base files.');
+                return;
+            }
+
+            const txtFiles = files.filter(file => file.endsWith('.txt'));
+            if (txtFiles.length > 0) {
+                message.reply(`Knowledge base files in directory:\n${txtFiles.join('\n')}`);
+            } else {
+                message.reply('No knowledge base files found in the directory.');
+            }
+        });
+
+        return;
+    }
+
     // Only process other commands if the bot is active
     if (isBotActive) {
         functions.handleCommand(client, openai, message, senderNumber, isAdmin, isModerator);
@@ -75,6 +147,37 @@ client.on('error', (error) => {
 });
 
 client.initialize();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

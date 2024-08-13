@@ -86,6 +86,9 @@ function checkModerators() {
     return Array.from(moderators);
 }
 
+
+
+
 function handleCommand(client, openai, message, senderNumber, isAdmin, isModerator) {
     const messageText = message.body.toLowerCase();
 
@@ -162,6 +165,23 @@ function handleCommand(client, openai, message, senderNumber, isAdmin, isModerat
                     message.reply(`Current moderators are: ${moderatorsList.join(', ')}`);
                     break;
 
+                case isAdmin && messageText.startsWith('!!kbadd'):
+                    message.reply('Please attach the knowledge base file with the command.');
+                    break;
+
+                case isAdmin && messageText.startsWith('!!deletekb'):
+                    const kbNameToDelete = message.body.split(' ')[1];
+                    if (kbNameToDelete) {
+                        message.reply(`Attempting to delete ${kbNameToDelete}.txt...`);
+                    } else {
+                        message.reply('Please specify the name of the knowledge base file to delete. Usage: !!deletekb [filename]');
+                    }
+                    break;
+
+                case isAdmin && messageText.startsWith('!!listkb'):
+                    message.reply('Listing all knowledge base files...');
+                    break;
+
                 case messageText.startsWith('!!menu'):
                     message.reply(showMenu(isAdmin));
                     break;
@@ -196,6 +216,9 @@ function showMenu(isAdmin) {
         - !!checkmoderators: List all current moderators
         - !!addmoderator "number": Add a moderator (Admin only)
         - !!removemoderator "number": Remove a moderator (Admin only)
+        - !!kbadd "filename": Add a new knowledge base file (Admin only)
+        - !!deletekb "filename": Delete a knowledge base file (Admin only)
+        - !!listkb: List all knowledge base files (Admin only)
         `;
     } else {
         return `
@@ -208,6 +231,9 @@ function showMenu(isAdmin) {
         `;
     }
 }
+
+
+
 
 // Export the functions to be used in index.js
 module.exports = {
