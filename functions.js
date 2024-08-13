@@ -5,8 +5,6 @@ let currentKnowledgeBase = 'default'; // Track the current knowledge base in use
 const pingIntervals = {}; // Store ping intervals per number
 const moderators = new Set(); // Set to store moderators
 
-let isBotActive = true; // Initial state of the bot
-
 function loadKnowledgeBase(kbName) {
     const kbFilePath = `${kbName}.txt`;
     if (fs.existsSync(kbFilePath)) {
@@ -59,7 +57,6 @@ function setReminder(client, number, message, time) {
 }
 
 async function generateResponse(openai, userQuery, knowledgeBase) {
-    // Combine user query with the knowledge base content
     const prompt = `KnowledgeBase:\n${knowledgeBase}\n\nUser Query: ${userQuery}\n\nResponse:`;
 
     const response = await openai.chat.completions.create({
@@ -86,21 +83,9 @@ function checkModerators() {
     return Array.from(moderators);
 }
 
-function stopBot() {
-    isBotActive = false;
-    console.log('Bot has been paused.');
-}
-
-function startBot() {
-    isBotActive = true;
-    console.log('Bot is now active.');
-}
-
-// Handle commands and messages based on user input
-function handleCommand(client, openai, message, senderNumber, isAdmin, isModerator, isBotActive) {
+function handleCommand(client, openai, message, senderNumber, isAdmin, isModerator) {
     const messageText = message.body.toLowerCase();
 
-    // Check if the message is a command (starts with '!!')
     if (messageText.startsWith('!!')) {
         if (isAdmin || isModerator) {
             switch (true) {
@@ -149,16 +134,6 @@ function handleCommand(client, openai, message, senderNumber, isAdmin, isModerat
                     }
                     break;
 
-                case messageText.startsWith('!!stop'):
-                    stopBot();
-                    message.reply('Bot has been paused.');
-                    break;
-
-                case messageText.startsWith('!!start'):
-                    startBot();
-                    message.reply('Bot is now active.');
-                    break;
-
                 case isAdmin && messageText.startsWith('!!addmoderator'):
                     const newModerator = message.body.split('"')[1];
                     if (newModerator) {
@@ -193,47 +168,35 @@ function handleCommand(client, openai, message, senderNumber, isAdmin, isModerat
                     break;
             }
         } else {
-            // If the user is not an admin or moderator, they can't use commands
             message.reply("You don't have permission to use commands.");
         }
     } else {
-        // Process normal user queries if the bot is active
-        if (isBotActive) {
-            const userQuery = message.body.toLowerCase();
-            generateResponse(openai, userQuery, knowledgeBase).then(reply => {
-                message.reply(reply);
-            }).catch(error => {
-                console.error('Error while processing the message:', error);
-                message.reply("Sorry, something went wrong while processing your request.");
-            });
-        } else {
-            console.log('Bot is paused, no response sent.');
-        }
+        const userQuery = message.body.toLowerCase();
+        generateResponse(openai, userQuery, knowledgeBase).then(reply => {
+            message.reply(reply);
+        }).catch(error => {
+            console.error('Error while processing the message:', error);
+            message.reply("Sorry, something went wrong while processing your request.");
+        });
     }
 }
 
-// Show different menus for Admins and Moderators
 function showMenu(isAdmin) {
     if (isAdmin) {
         return `
         *Commands Menu (Admin):*
-        - !!stop: Pause the bot
-        - !!start: Resume the bot
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
         - !!remind "number" "message" "x:y": Set a reminder for the specified number
         - !!knowledgebase "name": Switch to the specified knowledge base
         - !!checkmoderators: List all current moderators
-
         - !!addmoderator "number": Add a moderator (Admin only)
         - !!removemoderator "number": Remove a moderator (Admin only)
         `;
     } else {
         return `
         *Commands Menu (Moderator):*
-        - !!stop: Pause the bot
-        - !!start: Resume the bot
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
@@ -257,7 +220,5 @@ module.exports = {
     isModerator,
     checkModerators,
     handleCommand,
-    stopBot,      // Exporting stopBot
-    startBot,     // Exporting startBot
     moderators
 };

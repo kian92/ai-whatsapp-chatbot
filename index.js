@@ -17,8 +17,17 @@ const client = new Client({
 });
 
 const adminNumber = '923499490427';
-
 let isBotActive = true; // Control the bot's active state
+
+function stopBot() {
+    isBotActive = false;
+    console.log('Bot has been paused.');
+}
+
+function startBot() {
+    isBotActive = true;
+    console.log('Bot is now active.');
+}
 
 client.on('qr', (qr) => {
     qrcode.generate(qr, { small: true });
@@ -35,8 +44,23 @@ client.on('message', async (message) => {
     const isAdmin = senderNumber === adminNumber;
     const isModerator = functions.isModerator(senderNumber);
 
-    // Only process commands if the bot is active, or it's an admin trying to start/stop the bot
-    if (isBotActive || message.body.toLowerCase().startsWith('!!start') || message.body.toLowerCase().startsWith('!!stop')) {
+    const messageText = message.body.toLowerCase();
+
+    // Handle bot start/stop commands directly in index.js
+    if (messageText.startsWith('!!stop') && isAdmin) {
+        stopBot();
+        message.reply('Bot has been paused.');
+        return;
+    }
+
+    if (messageText.startsWith('!!start') && isAdmin) {
+        startBot();
+        message.reply('Bot is now active.');
+        return;
+    }
+
+    // Only process other commands if the bot is active
+    if (isBotActive) {
         functions.handleCommand(client, openai, message, senderNumber, isAdmin, isModerator);
     } else {
         console.log('Bot is paused, no response sent.');
@@ -48,6 +72,8 @@ client.on('error', (error) => {
 });
 
 client.initialize();
+
+
 
 
 
