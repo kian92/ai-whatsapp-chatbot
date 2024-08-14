@@ -61,7 +61,7 @@ function setReminder(client, number, message, time) {
 }
 
 async function generateResponse(openai, userQuery, knowledgeBase) {
-    const prompt = `KnowledgeBase:\n${knowledgeBase}\n\nUser Query: ${userQuery}\n\nResponse:`;
+    const prompt = `KnowledgeBase:\n${knowledgeBase}\n\nUsegit r Query: ${userQuery}\n\nResponse:`;
 
     const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
