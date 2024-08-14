@@ -51,13 +51,13 @@ client.on('message', async (message) => {
     const messageText = message.body.toLowerCase();
 
     // Handle bot start/stop commands directly in index.js
-    if (messageText.startsWith('!!stop') && isAdmin) {
+    if (messageText.startsWith('!!pause') && (isAdmin || isModerator)) {
         stopBot();
         message.reply('Bot has been paused.');
         return;
     }
 
-    if (messageText.startsWith('!!start') && isAdmin) {
+    if (messageText.startsWith('!!start') && (isAdmin || isModerator)) {
         startBot();
         message.reply('Bot is now active.');
         return;
