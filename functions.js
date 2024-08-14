@@ -120,13 +120,13 @@ function handleCommand(client, openai, message, senderNumber, isAdmin, isModerat
                     }
                     break;
 
-                case messageText.startsWith('!!ping'):
+                case messageText.startsWith('!!pause'):
                     const targetNumberPing = message.body.split('"')[1];
                     if (targetNumberPing) {
                         startPinging(client, targetNumberPing);
                         message.reply(`Started pinging ${targetNumberPing}.`);
                     } else {
-                        message.reply('Please specify the number to ping like !!ping "number".');
+                        message.reply('Please specify the number to pause like !!pause "number".');
                     }
                     break;
 
@@ -136,7 +136,7 @@ function handleCommand(client, openai, message, senderNumber, isAdmin, isModerat
                         stopPinging(targetNumberPingStop);
                         message.reply(`Stopped pinging ${targetNumberPingStop}.`);
                     } else {
-                        message.reply('Please specify the number to stop pinging like !!pingstop "number".');
+                        message.reply('Please specify the number to stop pinging like !!stop-ping "number".');
                     }
                     break;
 
@@ -208,6 +208,8 @@ function showMenu(isAdmin) {
     if (isAdmin) {
         return `
         *Commands Menu (Admin):*
+        - !!start  For starting bot
+        - !!pause  For pausing bot
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
