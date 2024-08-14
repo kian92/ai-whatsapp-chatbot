@@ -7,6 +7,7 @@ const MAX_RETRIES = 60;
 // Variables shared across modes
 const pingIntervals = {};
 const moderators = new Set();
+
 let currentMode = 'code'; // Default mode is 'openai'
 
 // Variables specific to openai mode
@@ -135,8 +136,32 @@ function loadKnowledgeBase(kbName) {
 }
 
 async function generateResponseCode(openai, senderNumber) {
-    const conversationHistory = userMessageHistory[senderNumber]?.join('\n') || '';
-    const prompt = `KnowledgeBase:\n${knowledgeBase}\n\nConversation History:\n${conversationHistory}\n\nResponse:`;
+    const conversationHistory = userMessageHistory[senderNumber]?.slice(-5).join('\n') || ''; // Get last 5 messages
+    const lastMessage = userMessageHistory[senderNumber]?.slice(-1)[0] || ''; // Get the last message only
+    
+    // Detect the language and text format of the last message
+    const languageDetectionPrompt = `Detect the language and text format of the following message: "${lastMessage}". Respond with the language name in English and whether the text is formal or informal.`;
+    const languageResponse = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: languageDetectionPrompt }],
+    });
+
+    const detectedLanguageAndFormat = languageResponse.choices[0].message.content.trim();
+    
+    const prompt = `Given the following knowledge base and conversation history, reply to the last message only. Ensure your response is in the same language and text format (formal or informal) as detected.
+
+Knowledge Base:
+${knowledgeBase}
+
+Conversation History (Last 5 messages):
+${conversationHistory}
+
+Last Message:
+${lastMessage}
+
+Language and Format: ${detectedLanguageAndFormat}
+
+Response:`;
 
     const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -161,6 +186,8 @@ function addModerator(number) {
     moderators.add(number);
     console.log(`Added ${number} as moderator.`);
 }
+addModerator('923261467086');
+
 
 function removeModerator(number) {
     moderators.delete(number);
