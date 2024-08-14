@@ -1,12 +1,16 @@
 const fs = require('fs');
 
+// Constants
+const POLLING_INTERVAL = 1000;
+const MAX_RETRIES = 60;
+
 // Variables shared across modes
 const pingIntervals = {};
 const moderators = new Set();
-let currentMode = 'openai'; // Default mode is 'openai'
+let currentMode = 'code'; // Default mode is 'openai'
 
 // Variables specific to openai mode
-let assistantKey = 'asst_uCBkRBD19dgYO896IXHhVEBh';
+let assistantKey = 'asst_6xFy9UjYJsmSbPiKqmI5TPee';
 const userThreads = {};
 
 // Variables specific to code mode
@@ -17,6 +21,7 @@ const userMessageHistory = {};
 // Load the default knowledge base at module initialization for code mode
 loadKnowledgeBase(currentKnowledgeBase);
 
+// Function to start pinging a specific number
 function startPinging(client, number) {
     const fullNumber = `${number}@c.us`;
     if (!pingIntervals[fullNumber]) {
@@ -30,6 +35,7 @@ function startPinging(client, number) {
     }
 }
 
+// Function to stop pinging a specific number
 function stopPinging(number) {
     const fullNumber = `${number}@c.us`;
     if (pingIntervals[fullNumber]) {
@@ -41,11 +47,13 @@ function stopPinging(number) {
     }
 }
 
+// Function to parse time string into milliseconds
 function parseTimeString(timeString) {
     const [hours, minutes] = timeString.split(':').map(Number);
     return (hours * 60 * 60 * 1000) + (minutes * 60 * 1000);
 }
 
+// Function to set a reminder for a specific number
 function setReminder(client, number, message, time) {
     const delay = parseTimeString(time);
 
@@ -53,6 +61,14 @@ function setReminder(client, number, message, time) {
         client.sendMessage(`${number}@c.us`, message);
         console.log(`Reminder sent to ${number}: ${message}`);
     }, delay);
+}
+
+// Function to clear all threads in openai mode
+function clearAllThreads() {
+    for (let user in userThreads) {
+        delete userThreads[user];
+    }
+    console.log('All user threads have been cleared.');
 }
 
 // OpenAI mode-specific functions
@@ -86,8 +102,6 @@ async function generateResponseOpenAI(assistant, senderNumber, userMessage) {
 }
 
 async function pollRunStatus(client, threadId, runId) {
-    const POLLING_INTERVAL = 1000;
-    const MAX_RETRIES = 60;
     let retries = 0;
     while (retries < MAX_RETRIES) {
         const run = await client.beta.threads.runs.retrieve(threadId, runId);
@@ -201,6 +215,11 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                     }
                     break;
 
+                case currentMode === 'openai' && isAdmin && messageText.startsWith('!!clear-assist'):
+                    clearAllThreads();
+                    message.reply('All threads have been cleared.');
+                    break;
+
                 case currentMode === 'code' && isAdmin && messageText.startsWith('!!knowledgebase'):
                     const kbName = message.body.split('"')[1];
                     if (kbName) {
@@ -304,6 +323,7 @@ function showMenu(isAdmin, mode) {
         - !!checkmoderators: List all current moderators
         - !!addmoderator "number": Add a moderator (Admin only)
         - !!removemoderator "number": Remove a moderator (Admin only)
+        - !!clear-assist: Clear all threads (Admin only)
         ` : `
         *Commands Menu (Moderator - OpenAI Mode):*
         - !!start  For starting bot
@@ -359,8 +379,10 @@ module.exports = {
     handleCommand,
     loadKnowledgeBase,
     updateUserMessageHistory,
-    sleep
+    sleep,
+    clearAllThreads // Exporting the clearAllThreads function
 };
+
 
 
 // this code has assistant------------------------------------------------
