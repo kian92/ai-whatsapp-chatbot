@@ -60,7 +60,13 @@ client.on('message', async (message) => {
         return;
     }
 
-    // Only process other commands if the bot is active
+    // Allow command processing even when bot is paused
+    if (messageText.startsWith('!!')) {
+        functions.handleCommand(client, assistant, message, senderNumber, isAdmin, isModerator);
+        return; // Exit after handling command to avoid processing as a regular message
+    }
+
+    // Only process regular messages if the bot is active
     if (isBotActive) {
         functions.handleCommand(client, assistant, message, senderNumber, isAdmin, isModerator);
     } else {

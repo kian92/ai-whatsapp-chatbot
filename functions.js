@@ -3,7 +3,8 @@ const fs = require('fs');
 // Constants
 const POLLING_INTERVAL = 1000;
 const MAX_RETRIES = 60;
-
+const userMessageCounts = {}; // Store message counts and timestamps for users
+let NO_LIMIT = false; // Flag to remove the message limit for all users
 // Variables shared across modes
 const pingIntervals = {};
 const moderators = new Set();
@@ -21,6 +22,37 @@ const userMessageHistory = {};
 
 // Load the default knowledge base at module initialization for code mode
 loadKnowledgeBase(currentKnowledgeBase);
+
+
+
+function checkMessageLimit(senderNumber, isAdmin) {
+    if (NO_LIMIT || isAdmin || isModerator(senderNumber)) return true; // Skip limit check for admins, moderators, or if no limit is applied
+
+    const userLimit = userMessageCounts[senderNumber]?.maxLimit || 100; // Default to 100 if not set
+    if (userMessageCounts[senderNumber]?.count >= userLimit) {
+        return false;
+    }
+    return true;
+}
+
+
+
+function trackUserMessage(senderNumber) {
+    const currentTime = Date.now();
+    if (!userMessageCounts[senderNumber]) {
+        userMessageCounts[senderNumber] = { count: 0, firstMessageTime: currentTime, maxLimit: 100 }; // Default max limit
+    }
+    const timeDiff = currentTime - userMessageCounts[senderNumber].firstMessageTime;
+
+    if (timeDiff > 24 * 60 * 60 * 1000) { // Reset after 24 hours
+        userMessageCounts[senderNumber] = { count: 0, firstMessageTime: currentTime, maxLimit: userMessageCounts[senderNumber].maxLimit };
+    }
+    
+    userMessageCounts[senderNumber].count += 1;
+}
+
+
+
 
 // Function to start pinging a specific number
 function startPinging(client, number) {
@@ -138,7 +170,7 @@ function loadKnowledgeBase(kbName) {
 async function generateResponseCode(openai, senderNumber) {
     const conversationHistory = userMessageHistory[senderNumber]?.slice(-5).join('\n') || ''; // Get last 5 messages
     const lastMessage = userMessageHistory[senderNumber]?.slice(-1)[0] || ''; // Get the last message only
-    
+
     // Detect the language and text format of the last message
     const languageDetectionPrompt = `Detect the language and text format of the following message: "${lastMessage}". Respond with the language name in English and whether the text is formal or informal.`;
     const languageResponse = await openai.chat.completions.create({
@@ -147,7 +179,7 @@ async function generateResponseCode(openai, senderNumber) {
     });
 
     const detectedLanguageAndFormat = languageResponse.choices[0].message.content.trim();
-    
+
     const prompt = `Given the following knowledge base and conversation history, reply to the last message only. Ensure your response is in the same language and text format (formal or informal) as detected.
 
 Knowledge Base:
@@ -208,8 +240,11 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
     updateUserMessageHistory(senderNumber, message.body);
 
     if (messageText.startsWith('!!')) {
-        if (isAdmin || isModerator) {
+        // Command processing, this should always run even when bot is paused
+        if (isAdmin || isModerator ) {
             switch (true) {
+                // Your existing command cases go here
+                // Example command:
                 case messageText.startsWith('!!remind'):
                     const parts = message.body.split('"');
                     if (parts.length === 7) {
@@ -222,6 +257,9 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                     }
                     break;
 
+
+
+
                 case isAdmin && messageText.startsWith('!!switch'):
                     const newMode = message.body.split('"')[1];
                     if (newMode === 'openai' || newMode === 'code') {
@@ -231,6 +269,26 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                         message.reply('Invalid mode. Use !!switch "openai" or !!switch "code".');
                     }
                     break;
+
+
+                case currentMode === 'code' && isAdmin && messageText.startsWith('!!listkb'):
+                    fs.readdir('.', (err, files) => {
+                        if (err) {
+                            message.reply('Error reading directory.');
+                            console.error(err);
+                        } else {
+                            const kbFiles = files.filter(file => file.endsWith('.txt'));
+                            if (kbFiles.length > 0) {
+                                message.reply(`Available knowledge base files:\n${kbFiles.join('\n')}`);
+                            } else {
+                                message.reply('No knowledge base files found.');
+                            }
+                        }
+                    });
+                    break;
+
+
+
 
                 case currentMode === 'openai' && isAdmin && messageText.startsWith('!!assist'):
                     const newAssistantKey = message.body.split('"')[1];
@@ -245,6 +303,46 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                 case currentMode === 'openai' && isAdmin && messageText.startsWith('!!clear-assist'):
                     clearAllThreads();
                     message.reply('All threads have been cleared.');
+                    break;
+
+                // Function to add a knowledge base file with a custom name
+                case currentMode === 'code' && isAdmin && messageText.startsWith('!!kbadd'):
+                    const customKbName = message.body.split(' ')[1]; // Extract custom name from command
+                    if (customKbName && message.hasMedia) {
+                        message.downloadMedia().then(media => {
+                            const kbFilePath = `./${customKbName}.txt`; // Use the custom name for the file
+
+                            fs.writeFileSync(kbFilePath, media.data, { encoding: 'base64' });
+                            message.reply(`Knowledge base "${customKbName}" has been added as ${customKbName}.txt.`);
+                        }).catch(err => {
+                            console.error('Error downloading media:', err);
+                            message.reply('Failed to download and save the knowledge base file.');
+                        });
+                    } else {
+                        message.reply('Please provide a custom name and attach the knowledge base file with the !!kbadd command.');
+                    }
+                    break;
+
+
+                case currentMode === 'code' && isAdmin && messageText.startsWith('!!deletekb'):
+                    const kbNameToDelete = message.body.split(' ')[1];
+                    if (kbNameToDelete) {
+                        const kbFilePathToDelete = `./${kbNameToDelete}.txt`;
+                        if (fs.existsSync(kbFilePathToDelete)) {
+                            fs.unlink(kbFilePathToDelete, (err) => {
+                                if (err) {
+                                    console.error(`Error deleting file "${kbNameToDelete}.txt":`, err);
+                                    message.reply(`Failed to delete ${kbNameToDelete}.txt. Please try again.`);
+                                } else {
+                                    message.reply(`Knowledge base "${kbNameToDelete}.txt" has been successfully deleted.`);
+                                }
+                            });
+                        } else {
+                            message.reply(`Knowledge base "${kbNameToDelete}.txt" does not exist.`);
+                        }
+                    } else {
+                        message.reply('Please specify the name of the knowledge base file to delete. Usage: !!deletekb [filename]');
+                    }
                     break;
 
                 case currentMode === 'code' && isAdmin && messageText.startsWith('!!knowledgebase'):
@@ -309,6 +407,42 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                     message.reply(showMenu(isAdmin, currentMode));
                     break;
 
+
+                // Reset message limit for a specific user
+                case isAdmin && messageText.startsWith('!!limit-reset'):
+    const resetParts = message.body.split('"'); // Renamed to resetParts
+    const targetNumber = resetParts[1];
+    const newLimit = parseInt(resetParts[3], 10);
+
+    if (targetNumber && !isNaN(newLimit)) {
+        if (!userMessageCounts[targetNumber]) {
+            userMessageCounts[targetNumber] = { count: 0, firstMessageTime: Date.now(), maxLimit: newLimit };
+        } else {
+            userMessageCounts[targetNumber].maxLimit = newLimit; // Set the new message limit
+        }
+        message.reply(`Message limit for ${targetNumber} has been set to ${newLimit}.`);
+    } else {
+        message.reply('Incorrect format. Please use !!limit-reset "number" "amount of messages".');
+    }
+    break;
+
+                // Remove message limit for all users
+                case isAdmin && messageText.startsWith('!!no-limit'):
+                    NO_LIMIT = true;
+                    message.reply('Message limit has been removed for all users.');
+                    break;
+                    case isAdmin && messageText.startsWith('!!yes-limit'):
+                        NO_LIMIT = false;
+                        
+                        // Reset the limits for all users back to default (e.g., 100 messages)
+                        for (let user in userMessageCounts) {
+                            userMessageCounts[user].maxLimit = 100; // Set the default limit (or any specific limit you want)
+                        }
+                        
+                        message.reply('Message limit has been enforced for all users.');
+                        break;
+                    
+
                 default:
                     message.reply("Unknown command. Please check the available commands using !!menu.");
                     break;
@@ -317,20 +451,30 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
             message.reply("You don't have permission to use commands.");
         }
     } else {
-        if (currentMode === 'openai') {
-            generateResponseOpenAI(assistantOrOpenAI, senderNumber, message.body).then(reply => {
-                message.reply(reply);
-            }).catch(error => {
-                console.error('Error while processing the message:', error);
-                message.reply("Sorry, something went wrong while processing your request.");
-            });
-        } else if (currentMode === 'code') {
-            generateResponseCode(assistantOrOpenAI, senderNumber).then(reply => {
-                message.reply(reply);
-            }).catch(error => {
-                console.error('Error while processing the message:', error);
-                message.reply("Sorry, something went wrong while processing your request.");
-            });
+        // Message handling when bot is not paused and within message limit
+        if (checkMessageLimit(senderNumber)) {
+            trackUserMessage(senderNumber);
+
+            if (currentMode === 'openai') {
+                generateResponseOpenAI(assistantOrOpenAI, senderNumber, message.body).then(reply => {
+                    message.reply(reply);
+                }).catch(error => {
+                    console.error('Error while processing the message:', error);
+                    message.reply("Sorry, something went wrong while processing your request.");
+                });
+            } else if (currentMode === 'code') {
+                generateResponseCode(assistantOrOpenAI, senderNumber).then(reply => {
+                    message.reply(reply);
+                }).catch(error => {
+                    console.error('Error while processing the message:', error);
+                    message.reply("Sorry, something went wrong while processing your request.");
+                });
+            }
+        } else {
+            message.reply(`Your todays messages limit is ended 
+- [usually it's 100 messages per day unless you get extra from admin]
+- Please try again next day and try keep the conversation short :')
+- Or you can ask admin to reset your limit whatsapp: 923346093321`);
         }
     }
 }
@@ -351,6 +495,9 @@ function showMenu(isAdmin, mode) {
         - !!addmoderator "number": Add a moderator (Admin only)
         - !!removemoderator "number": Remove a moderator (Admin only)
         - !!clear-assist: Clear all threads (Admin only)
+        - !!limit-reset "number" "amount of messages": Reset the message limit for a specific user (Admin only)
+        - !!no-limit: Remove message limit for all users (Admin only)
+        - !!yes-limit: Add limit to all users (Admin only)
         ` : `
         *Commands Menu (Moderator - OpenAI Mode):*
         - !!start  For starting bot
@@ -377,6 +524,9 @@ function showMenu(isAdmin, mode) {
         - !!kbadd "filename": Add a new knowledge base file (Admin only)
         - !!deletekb "filename": Delete a knowledge base file (Admin only)
         - !!listkb: List all knowledge base files (Admin only)
+        - !!limit-reset "number" "amount of messages": Reset the message limit for a specific user (Admin only)
+        - !!no-limit: Remove message limit for all users (Admin only)
+        - !!yes-limit: Add limit to all users (Admin only)
         ` : `
         *Commands Menu (Moderator - Code Mode):*
         - !!start  For starting bot
@@ -389,6 +539,7 @@ function showMenu(isAdmin, mode) {
         `;
     }
 }
+
 
 // Export the functions to be used in index.js
 module.exports = {
@@ -407,7 +558,9 @@ module.exports = {
     loadKnowledgeBase,
     updateUserMessageHistory,
     sleep,
-    clearAllThreads // Exporting the clearAllThreads function
+    clearAllThreads,
+    trackUserMessage,  // Exporting the new functions
+    checkMessageLimit  // Exporting the new functions
 };
 
 
