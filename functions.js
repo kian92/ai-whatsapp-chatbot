@@ -8,6 +8,10 @@ let NO_LIMIT = false; // Flag to remove the message limit for all users
 // Variables shared across modes
 const pingIntervals = {};
 const moderators = new Set();
+const reminders = {}; // To keep track of reminders
+const activeAskOperations = {}; // To track active !!ask operations
+
+
 
 let currentMode = 'code'; // Default mode is 'openai'
 
@@ -23,6 +27,66 @@ const userMessageHistory = {};
 // Load the default knowledge base at module initialization for code mode
 loadKnowledgeBase(currentKnowledgeBase);
 
+
+
+function handleAsk(client, numbers, message, interval, senderNumber) {
+    const numberArray = numbers.split(',').map(num => num.trim());
+    const delay = parseTimeString(interval);
+
+    numberArray.forEach((number, index) => {
+        const formattedNumber = `${number}@c.us`;
+
+        // Schedule the message
+        activeAskOperations[number] = setTimeout(() => {
+            client.sendMessage(formattedNumber, message)
+                .then(() => {
+                    console.log(`Message sent successfully to ${number}`);
+                    // Notify the bot (i.e., send the message to itself)
+                    client.sendMessage(`${senderNumber}@c.us`, `Message sent successfully to ${number}`);
+                })
+                .catch((err) => {
+                    console.error(`Failed to send message to ${number}:`, err);
+                    // Notify the bot (i.e., send the message to itself)
+                    client.sendMessage(`${senderNumber}@c.us`, `Failed to send message to ${number}: ${err.message}`);
+                });
+            delete activeAskOperations[number]; // Clean up after sending
+        }, delay * index);
+    });
+}
+
+
+// Function to cancel all !!ask operations
+function cancelAskOperations(client) {
+    Object.keys(activeAskOperations).forEach((number) => {
+        clearTimeout(activeAskOperations[number]);
+        console.log(`Operation canceled for ${number}`);
+        client.sendMessage(adminNumber, `Operation canceled for ${number}`);
+    });
+    // Clear the active operations list
+    Object.keys(activeAskOperations).forEach(key => delete activeAskOperations[key]);
+}
+
+// Function to handle !!reply command
+async function handleReply(client) {
+    if (botPaused) {
+        client.sendMessage(adminNumber, 'Bot is paused. No reply will be sent.');
+        return;
+    }
+
+    const unreadChats = await client.getUnreadMessages();
+
+    unreadChats.forEach(chat => {
+        chat.messages.forEach(message => {
+            if (!message.fromMe) {
+                // Process the message and send a reply
+                const reply = `Auto-reply to your message: ${message.body}`;
+                client.sendMessage(chat.from, reply)
+                    .then(() => console.log(`Replied to ${chat.from}: ${message.body}`))
+                    .catch(err => console.error(`Failed to reply to ${chat.from}:`, err));
+            }
+        });
+    });
+}
 
 
 function checkMessageLimit(senderNumber, isAdmin) {
@@ -47,7 +111,7 @@ function trackUserMessage(senderNumber) {
     if (timeDiff > 24 * 60 * 60 * 1000) { // Reset after 24 hours
         userMessageCounts[senderNumber] = { count: 0, firstMessageTime: currentTime, maxLimit: userMessageCounts[senderNumber].maxLimit };
     }
-    
+
     userMessageCounts[senderNumber].count += 1;
 }
 
@@ -82,18 +146,49 @@ function stopPinging(number) {
 
 // Function to parse time string into milliseconds
 function parseTimeString(timeString) {
-    const [hours, minutes] = timeString.split(':').map(Number);
-    return (hours * 60 * 60 * 1000) + (minutes * 60 * 1000);
+    const [days, hours, minutes, seconds] = timeString.split(':').map(Number);
+    return (days * 24 * 60 * 60 * 1000) + (hours * 60 * 60 * 1000) + (minutes * 60 * 1000) + (seconds * 1000);
 }
+
 
 // Function to set a reminder for a specific number
 function setReminder(client, number, message, time) {
-    const delay = parseTimeString(time);
+    const delay = parseTimeString(time);  // Using the updated parseTimeString function
+    const reminderKey = `${number}-${message}-${time}`;
 
-    setTimeout(() => {
-        client.sendMessage(`${number}@c.us`, message);
-        console.log(`Reminder sent to ${number}: ${message}`);
+    // Set a timeout and store it in the reminders object
+    reminders[reminderKey] = setTimeout(() => {
+        client.sendMessage(`${number}@c.us`, message)
+            .then(() => {
+                console.log(`Reminder sent to ${number}: ${message}`);
+                // Optionally, notify admin about the successful reminder
+            })
+            .catch((err) => {
+                console.error(`Failed to send reminder to ${number}:`, err);
+                // Notify admin about the failure to send the reminder
+                client.sendMessage(adminNumber, `Failed to send reminder to ${number}: ${err.message}`);
+            });
+        delete reminders[reminderKey];  // Clean up after sending the reminder
     }, delay);
+
+    console.log(`Reminder set for ${number} in ${time} with message: "${message}".`);
+}
+
+// Function to cancel all reminders for a specific number
+function cancelReminder(client, number) {
+    const reminderKeys = Object.keys(reminders).filter(key => key.startsWith(`${number}-`));
+
+    if (reminderKeys.length > 0) {
+        reminderKeys.forEach(reminderKey => {
+            clearTimeout(reminders[reminderKey]);
+            delete reminders[reminderKey];
+        });
+        console.log(`All reminders for ${number} have been canceled.`);
+        return true;
+    } else {
+        console.log(`No reminders found for ${number}.`);
+        return false;
+    }
 }
 
 // Function to clear all threads in openai mode
@@ -234,30 +329,64 @@ function checkModerators() {
     return Array.from(moderators);
 }
 
-// Handle commands and switching between modes
+
+
 function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin, isModerator) {
     const messageText = message.body.toLowerCase();
-    updateUserMessageHistory(senderNumber, message.body);
 
     if (messageText.startsWith('!!')) {
-        // Command processing, this should always run even when bot is paused
-        if (isAdmin || isModerator ) {
+        if (isAdmin || isModerator) {
             switch (true) {
-                // Your existing command cases go here
-                // Example command:
-                case messageText.startsWith('!!remind'):
-                    const parts = message.body.split('"');
-                    if (parts.length === 7) {
-                        const targetNumber = parts[1];
-                        const reminderMessage = parts[3];
-                        const time = parts[5];
-                        setReminder(client, targetNumber, reminderMessage, time);
+                case messageText.startsWith('!!ask'):
+                    const askParts = message.body.match(/"([^"]+)"/g);
+                    if (askParts && askParts.length === 3) {
+                        const numbers = askParts[0].replace(/"/g, '');
+                        const askMessage = askParts[1].replace(/"/g, '');
+                        const interval = askParts[2].replace(/"/g, '');
+                        handleAsk(client, numbers, askMessage, interval, senderNumber);
+                        message.reply(`Ask operation started for numbers: ${numbers}`);
                     } else {
-                        message.reply('Incorrect format. Please use !!remind "number" "message" "x:y".');
+                        message.reply('Incorrect format. Please use !!ask "number,number,number,..." "message" "00:00:00:00" (days:hours:minutes:seconds).');
                     }
                     break;
 
+                case messageText.startsWith('!!not-ask'):
+                    cancelAskOperations(client);
+                    message.reply('All ask operations have been canceled.');
+                    break;
 
+                case messageText.startsWith('!!remind'):
+                    const remindParts = message.body.match(/"([^"]+)"/g);
+                    if (remindParts && remindParts.length === 3) {
+                        const number = remindParts[0].replace(/"/g, '');
+                        const remindMessage = remindParts[1].replace(/"/g, '');
+                        const time = remindParts[2].replace(/"/g, '');
+                        setReminder(client, number, remindMessage, time);
+                        message.reply(`Reminder set for ${number} in ${time} with message: "${remindMessage}".`);
+                    } else {
+                        message.reply('Incorrect format. Please use !!remind "number" "message" "00:00:00:00" (days:hours:minutes:seconds).');
+                    }
+                    break;
+
+                case messageText.startsWith('!!reply'):
+                    handleReply(client);
+                    message.reply('Checking for unread messages and replying accordingly.');
+                    break;
+                    
+                    case messageText.startsWith('!!cancel-remind'):
+                        const cancelParts = message.body.split('"');
+                        if (cancelParts.length === 3) {
+                            const cancelNumber = cancelParts[1];
+                            const cancelSuccess = cancelReminder(client, cancelNumber);
+                            if (cancelSuccess) {
+                                message.reply(`All reminders for ${cancelNumber} have been canceled.`);
+                            } else {
+                                message.reply(`No reminders found for ${cancelNumber}.`);
+                            }
+                        } else {
+                            message.reply('Incorrect format. Please use !!cancel-remind "number".');
+                        }
+                        break;
 
 
                 case isAdmin && messageText.startsWith('!!switch'):
@@ -269,7 +398,6 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                         message.reply('Invalid mode. Use !!switch "openai" or !!switch "code".');
                     }
                     break;
-
 
                 case currentMode === 'code' && isAdmin && messageText.startsWith('!!listkb'):
                     fs.readdir('.', (err, files) => {
@@ -287,9 +415,6 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                     });
                     break;
 
-
-
-
                 case currentMode === 'openai' && isAdmin && messageText.startsWith('!!assist'):
                     const newAssistantKey = message.body.split('"')[1];
                     if (newAssistantKey) {
@@ -305,12 +430,11 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                     message.reply('All threads have been cleared.');
                     break;
 
-                // Function to add a knowledge base file with a custom name
                 case currentMode === 'code' && isAdmin && messageText.startsWith('!!kbadd'):
-                    const customKbName = message.body.split(' ')[1]; // Extract custom name from command
+                    const customKbName = message.body.split(' ')[1];
                     if (customKbName && message.hasMedia) {
                         message.downloadMedia().then(media => {
-                            const kbFilePath = `./${customKbName}.txt`; // Use the custom name for the file
+                            const kbFilePath = `./${customKbName}.txt`;
 
                             fs.writeFileSync(kbFilePath, media.data, { encoding: 'base64' });
                             message.reply(`Knowledge base "${customKbName}" has been added as ${customKbName}.txt.`);
@@ -322,7 +446,6 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                         message.reply('Please provide a custom name and attach the knowledge base file with the !!kbadd command.');
                     }
                     break;
-
 
                 case currentMode === 'code' && isAdmin && messageText.startsWith('!!deletekb'):
                     const kbNameToDelete = message.body.split(' ')[1];
@@ -407,41 +530,38 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                     message.reply(showMenu(isAdmin, currentMode));
                     break;
 
-
-                // Reset message limit for a specific user
                 case isAdmin && messageText.startsWith('!!limit-reset'):
-    const resetParts = message.body.split('"'); // Renamed to resetParts
-    const targetNumber = resetParts[1];
-    const newLimit = parseInt(resetParts[3], 10);
+                    const resetParts = message.body.split('"');
+                    const targetNumber = resetParts[1];
+                    const newLimit = parseInt(resetParts[3], 10);
 
-    if (targetNumber && !isNaN(newLimit)) {
-        if (!userMessageCounts[targetNumber]) {
-            userMessageCounts[targetNumber] = { count: 0, firstMessageTime: Date.now(), maxLimit: newLimit };
-        } else {
-            userMessageCounts[targetNumber].maxLimit = newLimit; // Set the new message limit
-        }
-        message.reply(`Message limit for ${targetNumber} has been set to ${newLimit}.`);
-    } else {
-        message.reply('Incorrect format. Please use !!limit-reset "number" "amount of messages".');
-    }
-    break;
+                    if (targetNumber && !isNaN(newLimit)) {
+                        if (!userMessageCounts[targetNumber]) {
+                            userMessageCounts[targetNumber] = { count: 0, firstMessageTime: Date.now(), maxLimit: newLimit };
+                        } else {
+                            userMessageCounts[targetNumber].maxLimit = newLimit;
+                        }
+                        message.reply(`Message limit for ${targetNumber} has been set to ${newLimit}.`);
+                    } else {
+                        message.reply('Incorrect format. Please use !!limit-reset "number" "amount of messages".');
+                    }
+                    break;
 
-                // Remove message limit for all users
                 case isAdmin && messageText.startsWith('!!no-limit'):
                     NO_LIMIT = true;
                     message.reply('Message limit has been removed for all users.');
                     break;
-                    case isAdmin && messageText.startsWith('!!yes-limit'):
-                        NO_LIMIT = false;
-                        
-                        // Reset the limits for all users back to default (e.g., 100 messages)
-                        for (let user in userMessageCounts) {
-                            userMessageCounts[user].maxLimit = 100; // Set the default limit (or any specific limit you want)
-                        }
-                        
-                        message.reply('Message limit has been enforced for all users.');
-                        break;
-                    
+
+                case isAdmin && messageText.startsWith('!!yes-limit'):
+                    NO_LIMIT = false;
+
+                    // Reset the limits for all users back to default (e.g., 100 messages)
+                    for (let user in userMessageCounts) {
+                        userMessageCounts[user].maxLimit = 100; // Set the default limit (or any specific limit you want)
+                    }
+
+                    message.reply('Message limit has been enforced for all users.');
+                    break;
 
                 default:
                     message.reply("Unknown command. Please check the available commands using !!menu.");
@@ -451,7 +571,7 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
             message.reply("You don't have permission to use commands.");
         }
     } else {
-        // Message handling when bot is not paused and within message limit
+        // Non-command message handling only when bot is not paused and within message limit
         if (checkMessageLimit(senderNumber)) {
             trackUserMessage(senderNumber);
 
@@ -471,53 +591,61 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                 });
             }
         } else {
-            message.reply(`Your todays messages limit is ended 
+            message.reply(`Your today's message limit is ended 
 - [usually it's 100 messages per day unless you get extra from admin]
-- Please try again next day and try keep the conversation short :')
-- Or you can ask admin to reset your limit whatsapp: 923346093321`);
+- Please try again next day and try to keep the conversation short :')
+- Or you can ask the admin to reset your limit.`);
         }
     }
 }
-
 function showMenu(isAdmin, mode) {
     if (mode === 'openai') {
         return isAdmin ? `
         *Commands Menu (Admin - OpenAI Mode):*
-        - !!start  For starting bot
-        - !!pause  For pausing bot
+        - !!start: For starting the bot
+        - !!pause: For pausing the bot
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
-        - !!remind "number" "message" "x:y": Set a reminder for the specified number
+        - !!remind "number" "message" "00:00:00:00": Set a reminder for the specified number with a message after a specified time (days:hours:minutes:seconds)
+        - !!ask "number,number,number" "00:00:00:00": Send a message to multiple numbers with a specified time interval (days:hours:minutes:seconds) between each
+        - !!cancel-remind "number": Cancel all reminders for the specified number
+        - !!not-ask: Cancel all active ask operations
         - !!assist "Key": Change the Assistant API Key
-        - !!switch "openai" or "code": Switch between modes
+        - !!switch "openai" or "code": Switch between OpenAI mode and Code mode
         - !!checkmoderators: List all current moderators
         - !!addmoderator "number": Add a moderator (Admin only)
         - !!removemoderator "number": Remove a moderator (Admin only)
         - !!clear-assist: Clear all threads (Admin only)
         - !!limit-reset "number" "amount of messages": Reset the message limit for a specific user (Admin only)
-        - !!no-limit: Remove message limit for all users (Admin only)
-        - !!yes-limit: Add limit to all users (Admin only)
+        - !!no-limit: Remove the message limit for all users (Admin only)
+        - !!yes-limit: Reinstate the message limit for all users (Admin only)
         ` : `
         *Commands Menu (Moderator - OpenAI Mode):*
-        - !!start  For starting bot
-        - !!pause  For pausing bot
+        - !!start: For starting the bot
+        - !!pause: For pausing the bot
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
-        - !!remind "number" "message" "x:y": Set a reminder for the specified number
+        - !!remind "number" "message" "00:00:00:00": Set a reminder for the specified number with a message after a specified time (days:hours:minutes:seconds)
+        - !!ask "number,number,number" "00:00:00:00": Send a message to multiple numbers with a specified time interval (days:hours:minutes:seconds) between each
+        - !!cancel-remind "number": Cancel all reminders for the specified number
+        - !!not-ask: Cancel all active ask operations
         `;
     } else {
         return isAdmin ? `
         *Commands Menu (Admin - Code Mode):*
-        - !!start  For starting bot
-        - !!pause  For pausing bot
+        - !!start: For starting the bot
+        - !!pause: For pausing the bot
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
-        - !!remind "number" "message" "x:y": Set a reminder for the specified number
+        - !!remind "number" "message" "00:00:00:00": Set a reminder for the specified number with a message after a specified time (days:hours:minutes:seconds)
+        - !!ask "number,number,number" "00:00:00:00": Send a message to multiple numbers with a specified time interval (days:hours:minutes:seconds) between each
+        - !!cancel-remind "number": Cancel all reminders for the specified number
+        - !!not-ask: Cancel all active ask operations
         - !!knowledgebase "name": Switch to the specified knowledge base
-        - !!switch "openai" or "code": Switch between modes
+        - !!switch "openai" or "code": Switch between OpenAI mode and Code mode
         - !!checkmoderators: List all current moderators
         - !!addmoderator "number": Add a moderator (Admin only)
         - !!removemoderator "number": Remove a moderator (Admin only)
@@ -525,21 +653,23 @@ function showMenu(isAdmin, mode) {
         - !!deletekb "filename": Delete a knowledge base file (Admin only)
         - !!listkb: List all knowledge base files (Admin only)
         - !!limit-reset "number" "amount of messages": Reset the message limit for a specific user (Admin only)
-        - !!no-limit: Remove message limit for all users (Admin only)
-        - !!yes-limit: Add limit to all users (Admin only)
+        - !!no-limit: Remove the message limit for all users (Admin only)
+        - !!yes-limit: Reinstate the message limit for all users (Admin only)
         ` : `
         *Commands Menu (Moderator - Code Mode):*
-        - !!start  For starting bot
-        - !!pause  For pausing bot
+        - !!start: For starting the bot
+        - !!pause: For pausing the bot
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
-        - !!remind "number" "message" "x:y": Set a reminder for the specified number
+        - !!remind "number" "message" "00:00:00:00": Set a reminder for the specified number with a message after a specified time (days:hours:minutes:seconds)
+        - !!ask "number,number,number" "00:00:00:00": Send a message to multiple numbers with a specified time interval (days:hours:minutes:seconds) between each
+        - !!cancel-remind "number": Cancel all reminders for the specified number
+        - !!not-ask: Cancel all active ask operations
         - !!knowledgebase "name": Switch to the specified knowledge base
         `;
     }
 }
-
 
 // Export the functions to be used in index.js
 module.exports = {
