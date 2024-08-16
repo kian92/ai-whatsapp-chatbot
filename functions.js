@@ -604,6 +604,7 @@ function showMenu(isAdmin, mode) {
         *Commands Menu (Admin - OpenAI Mode):*
         - !!start: For starting the bot
         - !!pause: For pausing the bot
+        - !!reply: Will check all unread messages and reply accordingly [only when bot is in active state]
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
@@ -624,6 +625,7 @@ function showMenu(isAdmin, mode) {
         *Commands Menu (Moderator - OpenAI Mode):*
         - !!start: For starting the bot
         - !!pause: For pausing the bot
+        - !!reply: Will check all unread messages and reply accordingly [only when bot is in active state]
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
@@ -637,6 +639,7 @@ function showMenu(isAdmin, mode) {
         *Commands Menu (Admin - Code Mode):*
         - !!start: For starting the bot
         - !!pause: For pausing the bot
+        - !!reply: Will check all unread messages and reply accordingly [only when bot is in active state]
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
@@ -659,6 +662,7 @@ function showMenu(isAdmin, mode) {
         *Commands Menu (Moderator - Code Mode):*
         - !!start: For starting the bot
         - !!pause: For pausing the bot
+        - !!reply: Will check all unread messages and reply accordingly [only when bot is in active state]
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
