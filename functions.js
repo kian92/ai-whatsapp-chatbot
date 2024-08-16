@@ -66,28 +66,6 @@ function cancelAskOperations(client) {
     Object.keys(activeAskOperations).forEach(key => delete activeAskOperations[key]);
 }
 
-// Function to handle !!reply command
-async function handleReply(client) {
-    if (botPaused) {
-        client.sendMessage(adminNumber, 'Bot is paused. No reply will be sent.');
-        return;
-    }
-
-    const unreadChats = await client.getUnreadMessages();
-
-    unreadChats.forEach(chat => {
-        chat.messages.forEach(message => {
-            if (!message.fromMe) {
-                // Process the message and send a reply
-                const reply = `Auto-reply to your message: ${message.body}`;
-                client.sendMessage(chat.from, reply)
-                    .then(() => console.log(`Replied to ${chat.from}: ${message.body}`))
-                    .catch(err => console.error(`Failed to reply to ${chat.from}:`, err));
-            }
-        });
-    });
-}
-
 
 function checkMessageLimit(senderNumber, isAdmin) {
     if (NO_LIMIT || isAdmin || isModerator(senderNumber)) return true; // Skip limit check for admins, moderators, or if no limit is applied
@@ -368,10 +346,7 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                     }
                     break;
 
-                case messageText.startsWith('!!reply'):
-                    handleReply(client);
-                    message.reply('Checking for unread messages and replying accordingly.');
-                    break;
+               
                     
                     case messageText.startsWith('!!cancel-remind'):
                         const cancelParts = message.body.split('"');
@@ -604,7 +579,6 @@ function showMenu(isAdmin, mode) {
         *Commands Menu (Admin - OpenAI Mode):*
         - !!start: For starting the bot
         - !!pause: For pausing the bot
-        - !!reply: Will check all unread messages and reply accordingly [only when bot is in active state]
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
@@ -625,7 +599,6 @@ function showMenu(isAdmin, mode) {
         *Commands Menu (Moderator - OpenAI Mode):*
         - !!start: For starting the bot
         - !!pause: For pausing the bot
-        - !!reply: Will check all unread messages and reply accordingly [only when bot is in active state]
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
@@ -639,7 +612,6 @@ function showMenu(isAdmin, mode) {
         *Commands Menu (Admin - Code Mode):*
         - !!start: For starting the bot
         - !!pause: For pausing the bot
-        - !!reply: Will check all unread messages and reply accordingly [only when bot is in active state]
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
@@ -662,7 +634,6 @@ function showMenu(isAdmin, mode) {
         *Commands Menu (Moderator - Code Mode):*
         - !!start: For starting the bot
         - !!pause: For pausing the bot
-        - !!reply: Will check all unread messages and reply accordingly [only when bot is in active state]
         - !!ping "number": Start pinging the specified number every 240 seconds
         - !!stop-ping "number": Stop pinging the specified number
         - !!menu: Show this command menu
