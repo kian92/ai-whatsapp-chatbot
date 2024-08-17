@@ -9,9 +9,7 @@ let NO_LIMIT = false; // Flag to remove the message limit for all users
 const pingIntervals = {};
 const moderators = new Set();
 const reminders = {}; // To keep track of reminders
-const activeAskOperations = {}; // To track active !!ask operations
-
-
+const activeAskOperations = {};
 
 let currentMode = 'code'; // Default mode is 'openai'
 
@@ -26,8 +24,6 @@ const userMessageHistory = {};
 
 // Load the default knowledge base at module initialization for code mode
 loadKnowledgeBase(currentKnowledgeBase);
-
-
 
 function handleAsk(client, numbers, message, interval, senderNumber) {
     const numberArray = numbers.split(',').map(num => num.trim());
@@ -54,8 +50,6 @@ function handleAsk(client, numbers, message, interval, senderNumber) {
     });
 }
 
-
-// Function to cancel all !!ask operations
 function cancelAskOperations(client) {
     Object.keys(activeAskOperations).forEach((number) => {
         clearTimeout(activeAskOperations[number]);
@@ -66,7 +60,6 @@ function cancelAskOperations(client) {
     Object.keys(activeAskOperations).forEach(key => delete activeAskOperations[key]);
 }
 
-
 function checkMessageLimit(senderNumber, isAdmin) {
     if (NO_LIMIT || isAdmin || isModerator(senderNumber)) return true; // Skip limit check for admins, moderators, or if no limit is applied
 
@@ -76,8 +69,6 @@ function checkMessageLimit(senderNumber, isAdmin) {
     }
     return true;
 }
-
-
 
 function trackUserMessage(senderNumber) {
     const currentTime = Date.now();
@@ -93,10 +84,6 @@ function trackUserMessage(senderNumber) {
     userMessageCounts[senderNumber].count += 1;
 }
 
-
-
-
-// Function to start pinging a specific number
 function startPinging(client, number) {
     const fullNumber = `${number}@c.us`;
     if (!pingIntervals[fullNumber]) {
@@ -110,7 +97,6 @@ function startPinging(client, number) {
     }
 }
 
-// Function to stop pinging a specific number
 function stopPinging(number) {
     const fullNumber = `${number}@c.us`;
     if (pingIntervals[fullNumber]) {
@@ -122,28 +108,22 @@ function stopPinging(number) {
     }
 }
 
-// Function to parse time string into milliseconds
 function parseTimeString(timeString) {
     const [days, hours, minutes, seconds] = timeString.split(':').map(Number);
     return (days * 24 * 60 * 60 * 1000) + (hours * 60 * 60 * 1000) + (minutes * 60 * 1000) + (seconds * 1000);
 }
 
-
-// Function to set a reminder for a specific number
 function setReminder(client, number, message, time) {
     const delay = parseTimeString(time);  // Using the updated parseTimeString function
     const reminderKey = `${number}-${message}-${time}`;
 
-    // Set a timeout and store it in the reminders object
     reminders[reminderKey] = setTimeout(() => {
         client.sendMessage(`${number}@c.us`, message)
             .then(() => {
                 console.log(`Reminder sent to ${number}: ${message}`);
-                // Optionally, notify admin about the successful reminder
             })
             .catch((err) => {
                 console.error(`Failed to send reminder to ${number}:`, err);
-                // Notify admin about the failure to send the reminder
                 client.sendMessage(adminNumber, `Failed to send reminder to ${number}: ${err.message}`);
             });
         delete reminders[reminderKey];  // Clean up after sending the reminder
@@ -152,7 +132,6 @@ function setReminder(client, number, message, time) {
     console.log(`Reminder set for ${number} in ${time} with message: "${message}".`);
 }
 
-// Function to cancel all reminders for a specific number
 function cancelReminder(client, number) {
     const reminderKeys = Object.keys(reminders).filter(key => key.startsWith(`${number}-`));
 
@@ -169,7 +148,6 @@ function cancelReminder(client, number) {
     }
 }
 
-// Function to clear all threads in openai mode
 function clearAllThreads() {
     for (let user in userThreads) {
         delete userThreads[user];
@@ -177,7 +155,6 @@ function clearAllThreads() {
     console.log('All user threads have been cleared.');
 }
 
-// OpenAI mode-specific functions
 async function generateResponseOpenAI(assistant, senderNumber, userMessage) {
     let threadId;
 
@@ -226,7 +203,6 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Code mode-specific functions
 function loadKnowledgeBase(kbName) {
     const kbFilePath = `${kbName}.txt`;
     if (fs.existsSync(kbFilePath)) {
@@ -241,11 +217,12 @@ function loadKnowledgeBase(kbName) {
 }
 
 async function generateResponseCode(openai, senderNumber) {
-    const conversationHistory = userMessageHistory[senderNumber]?.slice(-5).join('\n') || ''; // Get last 5 messages
     const lastMessage = userMessageHistory[senderNumber]?.slice(-1)[0] || ''; // Get the last message only
 
-    // Detect the language and text format of the last message
-    const languageDetectionPrompt = `Detect the language and text format of the following message: "${lastMessage}". Respond with the language name in English and whether the text is formal or informal.`;
+    console.log(`User History for ${senderNumber}:`, userMessageHistory[senderNumber]);
+    console.log(`Last Message:`, lastMessage);
+
+    const languageDetectionPrompt = `Detect the language and text format of the following message: "${lastMessage}". Respond with the same language but use english alphabets, accordingly to formal or informal.`;
     const languageResponse = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: languageDetectionPrompt }],
@@ -253,13 +230,10 @@ async function generateResponseCode(openai, senderNumber) {
 
     const detectedLanguageAndFormat = languageResponse.choices[0].message.content.trim();
 
-    const prompt = `Given the following knowledge base and conversation history, reply to the last message only. Ensure your response is in the same language and text format (formal or informal) as detected.
+    const prompt = `Given the following knowledge base, reply to the last message only. Ensure your response is in the same language and text format (formal or informal) as detected.
 
 Knowledge Base:
 ${knowledgeBase}
-
-Conversation History (Last 5 messages):
-${conversationHistory}
 
 Last Message:
 ${lastMessage}
@@ -271,28 +245,28 @@ Response:`;
     const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,  // Setting the temperature to 0.2
     });
 
     return response.choices[0].message.content.trim();
 }
+
 
 function updateUserMessageHistory(senderNumber, message) {
     if (!userMessageHistory[senderNumber]) {
         userMessageHistory[senderNumber] = [];
     }
     userMessageHistory[senderNumber].push(message);
-    if (userMessageHistory[senderNumber].length > 5) {
+    if (userMessageHistory[senderNumber].length > 20) { // Keep only the last 20 messages
         userMessageHistory[senderNumber].shift();
     }
 }
 
-// Moderator management functions
 function addModerator(number) {
     moderators.add(number);
     console.log(`Added ${number} as moderator.`);
 }
 addModerator('923261467086');
-
 
 function removeModerator(number) {
     moderators.delete(number);
@@ -307,9 +281,10 @@ function checkModerators() {
     return Array.from(moderators);
 }
 
-
-
 function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin, isModerator) {
+    // Ensure message history is tracked
+    updateUserMessageHistory(senderNumber, message.body);
+
     const messageText = message.body.toLowerCase();
 
     if (messageText.startsWith('!!')) {
@@ -346,23 +321,20 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                     }
                     break;
 
-               
-                    
-                    case messageText.startsWith('!!cancel-remind'):
-                        const cancelParts = message.body.split('"');
-                        if (cancelParts.length === 3) {
-                            const cancelNumber = cancelParts[1];
-                            const cancelSuccess = cancelReminder(client, cancelNumber);
-                            if (cancelSuccess) {
-                                message.reply(`All reminders for ${cancelNumber} have been canceled.`);
-                            } else {
-                                message.reply(`No reminders found for ${cancelNumber}.`);
-                            }
+                case messageText.startsWith('!!cancel-remind'):
+                    const cancelParts = message.body.split('"');
+                    if (cancelParts.length === 3) {
+                        const cancelNumber = cancelParts[1];
+                        const cancelSuccess = cancelReminder(client, cancelNumber);
+                        if (cancelSuccess) {
+                            message.reply(`All reminders for ${cancelNumber} have been canceled.`);
                         } else {
-                            message.reply('Incorrect format. Please use !!cancel-remind "number".');
+                            message.reply(`No reminders found for ${cancelNumber}.`);
                         }
-                        break;
-
+                    } else {
+                        message.reply('Incorrect format. Please use !!cancel-remind "number".');
+                    }
+                    break;
 
                 case isAdmin && messageText.startsWith('!!switch'):
                     const newMode = message.body.split('"')[1];
@@ -370,7 +342,7 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                         currentMode = newMode;
                         message.reply(`Switched to ${newMode} mode.`);
                     } else {
-                        message.reply('Invalid mode. Use !!switch "openai" or !!switch "code".');
+                        message.reply('Invalid mode. Use !!switch "openai" or "code".');
                     }
                     break;
 
@@ -530,9 +502,8 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
                 case isAdmin && messageText.startsWith('!!yes-limit'):
                     NO_LIMIT = false;
 
-                    // Reset the limits for all users back to default (e.g., 100 messages)
                     for (let user in userMessageCounts) {
-                        userMessageCounts[user].maxLimit = 100; // Set the default limit (or any specific limit you want)
+                        userMessageCounts[user].maxLimit = 100;
                     }
 
                     message.reply('Message limit has been enforced for all users.');
@@ -546,7 +517,6 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
             message.reply("You don't have permission to use commands.");
         }
     } else {
-        // Non-command message handling only when bot is not paused and within message limit
         if (checkMessageLimit(senderNumber)) {
             trackUserMessage(senderNumber);
 
@@ -573,6 +543,7 @@ function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin
         }
     }
 }
+
 function showMenu(isAdmin, mode) {
     if (mode === 'openai') {
         return isAdmin ? `
@@ -664,8 +635,8 @@ module.exports = {
     updateUserMessageHistory,
     sleep,
     clearAllThreads,
-    trackUserMessage,  // Exporting the new functions
-    checkMessageLimit  // Exporting the new functions
+    trackUserMessage,
+    checkMessageLimit
 };
 
 
