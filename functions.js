@@ -222,7 +222,7 @@ async function generateResponseCode(openai, senderNumber) {
     console.log(`User History for ${senderNumber}:`, userMessageHistory[senderNumber]);
     console.log(`Last Message:`, lastMessage);
 
-    const languageDetectionPrompt = `Detect the language and text format of the following message: "${lastMessage}". Respond with the same language but use english alphabets, accordingly to formal or informal.`;
+    const languageDetectionPrompt = `Detect the language and text format of the following message: "${lastMessage}". Respond Only in (Urdu,Hindi or english) language but use english alphabets, accordingly to formal or informal.`;
     const languageResponse = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: languageDetectionPrompt }],
