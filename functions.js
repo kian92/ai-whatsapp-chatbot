@@ -3,11 +3,13 @@ const MAX_RETRIES = 60;
 const userMessageCounts = {};
 let NO_LIMIT = false;
 const pingIntervals = {};
-const moderators = new Set();
+const moderators = new Set(['923261467086']); // Add any default moderator numbers here
 const reminders = {};
 const ignoreList = new Set();
 let assistantKey = 'asst_6xFy9UjYJsmSbPiKqmI5TPee';
 const userThreads = {};
+const MAX_TOKENS = 100; 
+
 
 async function sendMessageWithValidation(client, number, message, senderNumber) {
     try {
@@ -400,13 +402,13 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                     case '!!un-sub':
                     case '!!live-chat':
                         ignoreList.add(senderNumber);
-                        message.reply('You have been unsubscribed from receiving messages from this bot. Use !!sub or !!bot to re-subscribe.');
+                        message.reply('You have been unsubscribed from receiving messages from this Ai Assistant.\n- Use !!sub or !!bot to Subscribe Ai Assistant again.');
                         break;
 
                     case '!!sub':
                     case '!!bot':
                         ignoreList.delete(senderNumber);
-                        message.reply('You have been re-subscribed to receive messages from this bot.');
+                        message.reply('You have been re-subscribed to receive messages from this Ai Assistant.\n- Use !!live-chat or !!un-sub to  UnSubscribe Ai Assistant');
                         break;
 
                     default:
@@ -426,7 +428,7 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                     message.reply("Sorry, something went wrong while processing your request.");
                 });
             } else if (!ignoreList.has(senderNumber)) {
-                message.reply(`Your message limit for today has been reached. Please try again tomorrow or contact an admin to reset your limit.`);
+                message.reply(`Your message limit for today has been reached.\n- Please try again tomorrow or contact an admin to reset your limit.`);
             }
         }
     } catch (error) {
@@ -517,10 +519,10 @@ function showMenu(isAdmin, isModerator) {
         } else {
             return `
 *Commands Menu (User):*
-- !!un-sub: Unsubscribe from receiving messages.
-- !!live-chat: Unsubscribe from receiving messages.
-- !!sub: Resubscribe to receive messages.
-- !!bot: Resubscribe to receive messages.
+- !!un-sub: Unsubscribe from receiving Ai Assistant messages.
+- !!live-chat: Unsubscribe from Ai Assistant receiving messages.
+- !!sub: Resubscribe to receive Ai Assistant messages.
+- !!bot: Resubscribe to receive Ai Assistant messages.
 - !!show-menu: Show this command menu.
             `;
         }
