@@ -521,41 +521,45 @@ function showMenu(isAdmin, isModerator) {
         if (isAdmin) {
             return `
 *Commands Menu (Admin):*
-- !!set-key: Update the assistant key.
-- !!set-reminder: Set a reminder message.
-- !!cancel-reminder: Cancel a specific reminder.
-- !!ping: Start pinging a number.
-- !!stop-ping: Stop pinging a number.
-- !!add-mod: Add a moderator.
-- !!remove-mod: Remove a moderator.
-- !!list-mods: List all current moderators.
-- !!set-limit: Set a message limit for a user.
-- !!remove-limit: Remove message limits for all users.
-- !!enforce-limit: Reinstate message limits for all users.
-- !!clear-threads: Clear all threads.
-- !!un-sub: Unsubscribe from receiving messages.
-- !!sub: Resubscribe to receive messages.
-- !!show-menu: Show this command menu.
+- !!set-key: Update the assistant key
+- !!set-reminder: Set a reminder message
+- !!cancel-reminder: Cancel a specific reminder
+- !!ping: Start pinging a number
+- !!stop-ping: Stop pinging a number
+- !!add-mod: Add a moderator
+- !!remove-mod: Remove a moderator
+- !!list-mods: List all current moderators
+- !!set-limit: Set a message limit for a user
+- !!remove-limit: Remove message limits for all users
+- !!enforce-limit: Reinstate message limits for all users
+- !!clear-threads: Clear all threads
+- !!un-sub: Unsubscribe from receiving messages
+- !!sub: Resubscribe to receive messages
+- !!show-menu: Show the command menu
+- !!start: Start the bot
+- !!stop: Stop the bot
             `;
         } else if (isModerator) {
             return `
 *Commands Menu (Moderator):*
-- !!set-reminder: Set a reminder message.
-- !!cancel-reminder: Cancel a specific reminder.
-- !!ping: Start pinging a number.
-- !!stop-ping: Stop pinging a number.
-- !!un-sub: Unsubscribe from receiving messages.
-- !!sub: Resubscribe to receive messages.
-- !!show-menu: Show this command menu.
+- !!set-reminder: Set a reminder message
+- !!cancel-reminder: Cancel a specific reminder
+- !!ping: Start pinging a number
+- !!stop-ping: Stop pinging a number
+- !!un-sub: Unsubscribe from receiving messages
+- !!sub: Resubscribe to receive messages
+- !!show-menu: Show the command menu
+- !!start: Start the bot
+- !!stop: Stop the bot
             `;
         } else {
             return `
 *Commands Menu (User):*
-- !!un-sub: Unsubscribe from receiving Ai Assistant messages.
-- !!live-chat: Unsubscribe from Ai Assistant receiving messages.
-- !!sub: Resubscribe to receive Ai Assistant messages.
-- !!bot: Resubscribe to receive Ai Assistant messages.
-- !!show-menu: Show this command menu.
+- !!un-sub: Unsubscribe from receiving Ai Assistant messages
+- !!live-chat: Unsubscribe from Ai Assistant receiving messages (same as !!un-sub)
+- !!sub: Resubscribe to receive Ai Assistant messages
+- !!bot: Resubscribe to receive Ai Assistant messages (same as !!sub)
+- !!show-menu: Show the command menu
             `;
         }
     } catch (error) {
@@ -581,6 +585,8 @@ module.exports = {
     trackUserMessage,
     checkMessageLimit
 };
+
+
 
 
 
