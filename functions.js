@@ -8,7 +8,7 @@ const reminders = {};
 const ignoreList = new Set();
 let assistantKey = 'asst_6xFy9UjYJsmSbPiKqmI5TPee';
 const userThreads = {};
-const MAX_TOKENS = 100; 
+const DEFAULT_MESSAGE_LIMIT = 100; // Added default message limit
 
 
 async function sendMessageWithValidation(client, number, message, senderNumber) {
@@ -34,25 +34,50 @@ async function sendMessageWithValidation(client, number, message, senderNumber) 
 function checkMessageLimit(senderNumber, isAdmin) {
     try {
         if (NO_LIMIT || isAdmin || isModerator(senderNumber)) return true;
-        const userLimit = userMessageCounts[senderNumber]?.maxLimit || 100;
-        return userMessageCounts[senderNumber]?.count < userLimit;
+        
+        // Initialize user data if it doesn't exist
+        if (!userMessageCounts[senderNumber]) {
+            userMessageCounts[senderNumber] = { 
+                count: 0, 
+                firstMessageTime: Date.now(), 
+                maxLimit: DEFAULT_MESSAGE_LIMIT 
+            };
+        }
+
+        const userLimit = userMessageCounts[senderNumber].maxLimit;
+        return userMessageCounts[senderNumber].count < userLimit;
     } catch (error) {
         console.error(`Error in checkMessageLimit: ${error.message}`);
         return false;
     }
 }
-
 function trackUserMessage(senderNumber) {
     try {
         const currentTime = Date.now();
+        
+        // Ensure userMessageCounts for this user is initialized
         if (!userMessageCounts[senderNumber]) {
-            userMessageCounts[senderNumber] = { count: 0, firstMessageTime: currentTime, maxLimit: 100 };
+            userMessageCounts[senderNumber] = { 
+                count: 0, 
+                firstMessageTime: currentTime, 
+                maxLimit: DEFAULT_MESSAGE_LIMIT 
+            };
         }
+
+        // Calculate the time difference
         const timeDiff = currentTime - userMessageCounts[senderNumber].firstMessageTime;
+
+        // If 24 hours have passed, reset the message count and update the firstMessageTime
         if (timeDiff > 24 * 60 * 60 * 1000) {
-            userMessageCounts[senderNumber] = { count: 0, firstMessageTime: currentTime, maxLimit: userMessageCounts[senderNumber].maxLimit };
+            userMessageCounts[senderNumber].count = 0;
+            userMessageCounts[senderNumber].firstMessageTime = currentTime;
         }
+
+        // Increment the message count
         userMessageCounts[senderNumber].count += 1;
+
+        // Print the number of messages the user has sent in the last 24 hours
+        // console.log(`User ${senderNumber} has sent ${userMessageCounts[senderNumber].count} messages in the last 24 hours. Message limit: ${userMessageCounts[senderNumber].maxLimit}`);
     } catch (error) {
         console.error(`Error in trackUserMessage: ${error.message}`);
     }
@@ -178,7 +203,7 @@ async function generateResponseOpenAI(assistant, senderNumber, userMessage) {
         });
 
         const run = await assistant.beta.threads.runs.create(threadId, {
-            assistant_id: assistantKey
+            assistant_id: assistantKey // Use the latest assistant key here
         });
 
         await pollRunStatus(assistant, threadId, run.id);
@@ -274,19 +299,23 @@ function hasPermission(senderNumber, command, isAdmin, isModerator) {
 
 async function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin, isModerator) {
     try {
-        const messageText = message.body.trim().toLowerCase();
+        // Extract the assistant key without converting to lowercase
+        let messageText = message.body.trim();
         const [command, ...args] = messageText.split(' ');
 
-        if (ignoreList.has(senderNumber) && command !== '!!sub' && command !== '!!bot') {
+        // Convert only the command to lowercase, keep assistant key as it is
+        const lowerCommand = command.toLowerCase();
+
+        if (ignoreList.has(senderNumber) && lowerCommand !== '!!sub' && lowerCommand !== '!!bot') {
             return;
         }
 
-        if (command.startsWith('!!')) {
-            if (command === '!!show-menu') {
+        if (lowerCommand.startsWith('!!')) {
+            if (lowerCommand === '!!show-menu') {
                 // Allow all users to access the show-menu command
                 message.reply(showMenu(isAdmin, isModerator));
-            } else if (hasPermission(senderNumber, command, isAdmin, isModerator)) {
-                switch (command) {
+            } else if (hasPermission(senderNumber, lowerCommand, isAdmin, isModerator)) {
+                switch (lowerCommand) {
                     case '!!set-key':
                         const newAssistantKey = extractQuotedString(args.join(' '));
                         if (newAssistantKey) {
@@ -296,6 +325,7 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                             message.reply('Please provide a valid assistant key using !!set-key "YourKey".');
                         }
                         break;
+
 
                     case '!!set-reminder':
                         const [number, remindMessage, time] = extractMultipleQuotedStrings(args.join(' '));
@@ -437,8 +467,6 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
     }
 }
 
-
-
 function extractQuotedString(text) {
     try {
         const match = text.match(/"([^"]+)"/);
@@ -465,7 +493,11 @@ function setUserMessageLimit(number, limit) {
             throw new Error('Invalid input for setting message limit.');
         }
         if (!userMessageCounts[number]) {
-            userMessageCounts[number] = { count: 0, firstMessageTime: Date.now(), maxLimit: limit };
+            userMessageCounts[number] = { 
+                count: 0, 
+                firstMessageTime: Date.now(), 
+                maxLimit: limit 
+            };
         } else {
             userMessageCounts[number].maxLimit = limit;
         }
@@ -477,7 +509,7 @@ function setUserMessageLimit(number, limit) {
 function resetUserMessageLimits() {
     try {
         for (let user in userMessageCounts) {
-            userMessageCounts[user].maxLimit = 100;
+            userMessageCounts[user].maxLimit = DEFAULT_MESSAGE_LIMIT;
         }
     } catch (error) {
         console.error(`Error in resetUserMessageLimits: ${error.message}`);
