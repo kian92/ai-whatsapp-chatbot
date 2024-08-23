@@ -537,7 +537,7 @@ function showMenu(isAdmin, isModerator) {
 - !!sub: Resubscribe to receive messages
 - !!show-menu: Show the command menu
 - !!start: Start the bot
-- !!stop: Stop the bot
+- !!pause: Stop the bot
             `;
         } else if (isModerator) {
             return `
@@ -550,7 +550,7 @@ function showMenu(isAdmin, isModerator) {
 - !!sub: Resubscribe to receive messages
 - !!show-menu: Show the command menu
 - !!start: Start the bot
-- !!stop: Stop the bot
+- !!pause: Stop the bot
             `;
         } else {
             return `
