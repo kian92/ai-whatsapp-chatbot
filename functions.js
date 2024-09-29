@@ -506,20 +506,21 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
     userProcessingStatus[senderNumber] = true;
 
     const combinedMessage = userMessages[senderNumber].join('\n');
+    const isVoiceMessage = combinedMessage.startsWith('Transcribed voice message:');
     userMessages[senderNumber] = []; // Clear the messages
 
     try {
         const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, combinedMessage);
         
-        // Generate audio response
-        const audioBuffer = await generateAudioResponse(assistantOrOpenAI, response);
-        
-        // Send text response
+        // Send text response for all message types
         await client.sendMessage(`${senderNumber}@c.us`, response);
         
-        // Send audio response
-        const media = new MessageMedia('audio/ogg', audioBuffer.toString('base64'), 'response.ogg');
-        await client.sendMessage(`${senderNumber}@c.us`, media, { sendAudioAsVoice: true });
+        // Generate and send audio response only for voice messages
+        if (isVoiceMessage) {
+            const audioBuffer = await generateAudioResponse(assistantOrOpenAI, response);
+            const media = new MessageMedia('audio/ogg', audioBuffer.toString('base64'), 'response.ogg');
+            await client.sendMessage(`${senderNumber}@c.us`, media, { sendAudioAsVoice: true });
+        }
     } catch (error) {
         console.error(`Error processing messages for ${senderNumber}: ${error.message}`);
         await client.sendMessage(`${senderNumber}@c.us`, "Sorry, an error occurred while processing your messages.");
