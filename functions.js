@@ -8,9 +8,8 @@ let assistantKey = 'asst_6xFy9UjYJsmSbPiKqmI5TPee';
 const userThreads = {};
 const DEFAULT_MESSAGE_LIMIT = 100; // Added default message limit
 const userMessages = {};
-const MESSAGE_WAIT_TIME = 2 * 60 * 1000; // 2 minutes in milliseconds
-const INACTIVITY_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-const userInactivityTimers = {};
+const userMessageQueue = {};
+const userProcessingStatus = {};
 
 
 async function sendMessageWithValidation(client, number, message, senderNumber) {
@@ -338,11 +337,11 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                 trackUserMessage(senderNumber);
                 storeUserMessage(client, assistantOrOpenAI, senderNumber, message);
                 
-                // Clear inactivity timer if exists
-                if (userInactivityTimers[senderNumber]) {
-                    clearTimeout(userInactivityTimers[senderNumber]);
-                    delete userInactivityTimers[senderNumber];
-                }
+                // Remove the inactivity timer logic
+                // if (userInactivityTimers[senderNumber]) {
+                //     clearTimeout(userInactivityTimers[senderNumber]);
+                //     delete userInactivityTimers[senderNumber];
+                // }
             } else if (!ignoreList.has(senderNumber)) {
                 message.reply(`Your message limit for today has been reached.\n- Please try again tomorrow or contact an admin to reset your limit.`);
             }
@@ -452,21 +451,21 @@ function showMenu(isAdmin, isModerator) {
 
 function storeUserMessage(client, assistantOrOpenAI, senderNumber, message) {
     if (!userMessages[senderNumber]) {
-        userMessages[senderNumber] = {
-            messages: [],
-            timer: null
-        };
+        userMessages[senderNumber] = [];
+    }
+    if (!userMessageQueue[senderNumber]) {
+        userMessageQueue[senderNumber] = [];
     }
 
-    let messageToStore = ''
+    let messageToStore = '';
 
     // Check for document types
     if (message.type === 'document') {
         const mimeType = message.mimetype;
         if (mimeType === 'application/pdf' || (mimeType && mimeType.includes('word'))) {
-            messageToStore = "CV is sent";
+            messageToStore = "CV is sent. " + (message.body || '');
         } else {
-            messageToStore = `A document of type ${mimeType} was sent`;
+            messageToStore = `A document of type ${mimeType} was sent. ` + (message.body || '');
         }
     } else if (message.type === 'ptt' || message.type === 'audio' || message.type === 'image') {
         // Ignore voice messages and pictures
@@ -477,61 +476,40 @@ function storeUserMessage(client, assistantOrOpenAI, senderNumber, message) {
         messageToStore = message.body || `A message of type ${message.type} was received`;
     }
 
-    userMessages[senderNumber].messages.push(messageToStore);
-
-    // Clear existing timer if there is one
-    if (userMessages[senderNumber].timer) {
-        clearTimeout(userMessages[senderNumber].timer);
-    }
-
-    // Set new timer
-    userMessages[senderNumber].timer = setTimeout(() => {
-        sendStoredMessages(client, assistantOrOpenAI, senderNumber);
-    }, MESSAGE_WAIT_TIME);
-}
-
-async function sendStoredMessages(client, assistantOrOpenAI, senderNumber) {
-    if (userMessages[senderNumber] && userMessages[senderNumber].messages.length > 0) {
-        const combinedMessage = userMessages[senderNumber].messages.join('\n');
-        
-        try {
-            const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, combinedMessage);
-            // Send the response back to the user
-            await client.sendMessage(`${senderNumber}@c.us`, response);
-
-            // Set inactivity timer only if it doesn't exist for this user
-            if (!userInactivityTimers[senderNumber]) {
-                setInactivityTimer(client, senderNumber);
-            }
-        } catch (error) {
-            console.error(`Error sending stored messages for ${senderNumber}: ${error.message}`);
-            await client.sendMessage(`${senderNumber}@c.us`, "Sorry, an error occurred while processing your messages.");
-        }
-
-        // Clear the messages and timer after sending
-        delete userMessages[senderNumber];
+    if (userProcessingStatus[senderNumber]) {
+        // If a message is being processed, add this message to the queue
+        userMessageQueue[senderNumber].push(messageToStore);
+    } else {
+        // If no message is being processed, process this message immediately
+        userMessages[senderNumber].push(messageToStore);
+        processUserMessages(client, assistantOrOpenAI, senderNumber);
     }
 }
 
-function setInactivityTimer(client, senderNumber) {
-    // Set new inactivity timer only if it doesn't exist
-    if (!userInactivityTimers[senderNumber]) {
-        userInactivityTimers[senderNumber] = setTimeout(() => {
-            sendInactivityMessage(client, senderNumber);
-        }, INACTIVITY_TIMEOUT);
-    }
-}
+async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
+    if (userMessages[senderNumber].length === 0) return;
 
-async function sendInactivityMessage(client, senderNumber) {
+    userProcessingStatus[senderNumber] = true;
+
+    const combinedMessage = userMessages[senderNumber].join('\n');
+    userMessages[senderNumber] = []; // Clear the messages
+
     try {
-        await client.sendMessage(`${senderNumber}@c.us`, "Are you still interested?");
-        console.log(`Inactivity message sent to ${senderNumber}`);
+        const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, combinedMessage);
+        await client.sendMessage(`${senderNumber}@c.us`, response);
     } catch (error) {
-        console.error(`Error sending inactivity message to ${senderNumber}: ${error.message}`);
+        console.error(`Error processing messages for ${senderNumber}: ${error.message}`);
+        await client.sendMessage(`${senderNumber}@c.us`, "Sorry, an error occurred while processing your messages.");
     }
-    // Clear the timer after sending the message
-    clearTimeout(userInactivityTimers[senderNumber]);
-    delete userInactivityTimers[senderNumber];
+
+    userProcessingStatus[senderNumber] = false;
+
+    // Process any queued messages
+    if (userMessageQueue[senderNumber].length > 0) {
+        userMessages[senderNumber] = userMessageQueue[senderNumber];
+        userMessageQueue[senderNumber] = [];
+        processUserMessages(client, assistantOrOpenAI, senderNumber);
+    }
 }
 
 module.exports = {
@@ -548,7 +526,5 @@ module.exports = {
     trackUserMessage,
     checkMessageLimit,
     storeUserMessage,
-    sendStoredMessages,
-    setInactivityTimer,
-    sendInactivityMessage
+    processUserMessages
 };
