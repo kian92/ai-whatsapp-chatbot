@@ -10,6 +10,10 @@ const DEFAULT_MESSAGE_LIMIT = 100; // Added default message limit
 const userMessages = {};
 const userMessageQueue = {};
 const userProcessingStatus = {};
+const fs = require('fs');
+const axios = require('axios');
+const FormData = require('form-data');
+const { MessageMedia } = require('whatsapp-web.js');
 
 
 async function sendMessageWithValidation(client, number, message, senderNumber) {
@@ -35,13 +39,13 @@ async function sendMessageWithValidation(client, number, message, senderNumber) 
 function checkMessageLimit(senderNumber, isAdmin) {
     try {
         if (NO_LIMIT || isAdmin || isModerator(senderNumber)) return true;
-        
+
         // Initialize user data if it doesn't exist
         if (!userMessageCounts[senderNumber]) {
-            userMessageCounts[senderNumber] = { 
-                count: 0, 
-                firstMessageTime: Date.now(), 
-                maxLimit: DEFAULT_MESSAGE_LIMIT 
+            userMessageCounts[senderNumber] = {
+                count: 0,
+                firstMessageTime: Date.now(),
+                maxLimit: DEFAULT_MESSAGE_LIMIT
             };
         }
 
@@ -55,13 +59,13 @@ function checkMessageLimit(senderNumber, isAdmin) {
 function trackUserMessage(senderNumber) {
     try {
         const currentTime = Date.now();
-        
+
         // Ensure userMessageCounts for this user is initialized
         if (!userMessageCounts[senderNumber]) {
-            userMessageCounts[senderNumber] = { 
-                count: 0, 
-                firstMessageTime: currentTime, 
-                maxLimit: DEFAULT_MESSAGE_LIMIT 
+            userMessageCounts[senderNumber] = {
+                count: 0,
+                firstMessageTime: currentTime,
+                maxLimit: DEFAULT_MESSAGE_LIMIT
             };
         }
 
@@ -336,7 +340,7 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
             if (!ignoreList.has(senderNumber) && checkMessageLimit(senderNumber, isAdmin)) {
                 trackUserMessage(senderNumber);
                 storeUserMessage(client, assistantOrOpenAI, senderNumber, message);
-                
+
                 // Remove the inactivity timer logic
                 // if (userInactivityTimers[senderNumber]) {
                 //     clearTimeout(userInactivityTimers[senderNumber]);
@@ -382,10 +386,10 @@ function setUserMessageLimit(number, limit) {
             throw new Error('Invalid input for setting message limit.');
         }
         if (!userMessageCounts[number]) {
-            userMessageCounts[number] = { 
-                count: 0, 
-                firstMessageTime: Date.now(), 
-                maxLimit: limit 
+            userMessageCounts[number] = {
+                count: 0,
+                firstMessageTime: Date.now(),
+                maxLimit: limit
             };
         } else {
             userMessageCounts[number].maxLimit = limit;
@@ -449,7 +453,7 @@ function showMenu(isAdmin, isModerator) {
     }
 }
 
-function storeUserMessage(client, assistantOrOpenAI, senderNumber, message) {
+async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message) {
     if (!userMessages[senderNumber]) {
         userMessages[senderNumber] = [];
     }
@@ -459,16 +463,26 @@ function storeUserMessage(client, assistantOrOpenAI, senderNumber, message) {
 
     let messageToStore = '';
 
-    // Check for document types
-    if (message.type === 'document') {
+    // Handle voice messages
+    if (message.type === 'ptt' || message.type === 'audio') {
+        try {
+            const media = await message.downloadMedia();
+            const audioBuffer = Buffer.from(media.data, 'base64');
+            const transcription = await transcribeAudio(assistantOrOpenAI, audioBuffer);
+            messageToStore = `Transcribed voice message: ${transcription}`;
+        } catch (error) {
+            console.error(`Error processing voice message: ${error.message}`);
+            messageToStore = "Sorry, I couldn't process your voice message.";
+        }
+    } else if (message.type === 'document') {
         const mimeType = message.mimetype;
         if (mimeType === 'application/pdf' || (mimeType && mimeType.includes('word'))) {
             messageToStore = "CV is sent. " + (message.body || '');
         } else {
             messageToStore = `A document of type ${mimeType} was sent. ` + (message.body || '');
         }
-    } else if (message.type === 'ptt' || message.type === 'audio' || message.type === 'image') {
-        // Ignore voice messages and pictures
+    } else if (message.type === 'image') {
+        // Ignore pictures
         console.log(`Ignored ${message.type} message from ${senderNumber}`);
         return;
     } else {
@@ -496,7 +510,16 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
 
     try {
         const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, combinedMessage);
+        
+        // Generate audio response
+        const audioBuffer = await generateAudioResponse(assistantOrOpenAI, response);
+        
+        // Send text response
         await client.sendMessage(`${senderNumber}@c.us`, response);
+        
+        // Send audio response
+        const media = new MessageMedia('audio/ogg', audioBuffer.toString('base64'), 'response.ogg');
+        await client.sendMessage(`${senderNumber}@c.us`, media, { sendAudioAsVoice: true });
     } catch (error) {
         console.error(`Error processing messages for ${senderNumber}: ${error.message}`);
         await client.sendMessage(`${senderNumber}@c.us`, "Sorry, an error occurred while processing your messages.");
@@ -510,6 +533,32 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
         userMessageQueue[senderNumber] = [];
         processUserMessages(client, assistantOrOpenAI, senderNumber);
     }
+}
+
+async function transcribeAudio(assistantOrOpenAI, audioBuffer) {
+    const formData = new FormData();
+    formData.append('file', audioBuffer, { filename: 'audio.ogg' });
+    formData.append('model', 'whisper-1');
+
+    const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+        headers: {
+            ...formData.getHeaders(),
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+    });
+
+    return response.data.text;
+}
+
+async function generateAudioResponse(assistantOrOpenAI, text) {
+    const response = await assistantOrOpenAI.audio.speech.create({
+        model: "tts-1",
+        voice: "alloy",
+        input: text,
+    });
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return buffer;
 }
 
 module.exports = {
@@ -526,5 +575,7 @@ module.exports = {
     trackUserMessage,
     checkMessageLimit,
     storeUserMessage,
-    processUserMessages
+    processUserMessages,
+    transcribeAudio,
+    generateAudioResponse,
 };
