@@ -107,35 +107,27 @@ async function processMessage(message) {
 
     console.log(`Processing message from ${senderNumber}. isAdmin: ${isAdmin}, isModerator: ${isModerator}, isBot: ${isBot}`);
 
-    // Handle commands (including bot's own commands)
     if (messageText.toLowerCase().startsWith('!!')) {
         console.log(`Detected command: ${messageText}`);
         const response = await functions.handleCommand(client, assistant, message, senderNumber, isAdmin, isModerator, stopBot, startBot);
         console.log(`Command response: ${response}`);
-        if (response) {
-            if (!isBot) {
-                await client.sendMessage(senderId, response);
-            } else {
-                console.log(`Bot command processed: ${messageText}`);
-            }
+        if (response && !isBot) {
+            await client.sendMessage(senderId, response);
         }
     } else if (isBotActive && !isBot) {
         // Check if the sender is in the ignore list
         if (functions.isIgnored(senderNumber)) {
             console.log(`Ignoring message from ${senderNumber} as they are in the ignore list`);
         } else {
-            // Generate AI response for non-command messages (excluding bot's own messages)
-            const response = await functions.generateResponseOpenAI(assistant, senderNumber, messageText);
-            await client.sendMessage(senderId, response);
+            // Store the message for processing with a delay
+            await functions.storeUserMessage(client, assistant, senderNumber, message);
         }
+    } else if (isBot) {
+        console.log(`Received bot's own message: ${messageText}`);
     }
 }
 
 client.on('message_create', async (message) => {
-    const senderId = message.from;
-    const senderNumber = senderId.split('@')[0];
-
-    // Process all messages, including those from the bot
     await processMessage(message);
 });
 

@@ -15,6 +15,13 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { MessageMedia } = require('whatsapp-web.js');
 
+const userMessageQueues = {};
+const userProcessingTimers = {};
+
+// Add this function to generate a random delay between 10 and 30 seconds
+function getRandomDelay() {
+    return Math.floor(Math.random() * (30000 - 10000 + 1) + 10000);
+}
 
 async function sendMessageWithValidation(client, number, message, senderNumber) {
     try {
@@ -476,11 +483,14 @@ function showMenu(isAdmin, isModerator) {
 }
 
 async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message) {
-    if (!userMessages[senderNumber]) {
-        userMessages[senderNumber] = [];
+    // Check if the sender is the bot itself
+    if (senderNumber === client.info.wid.user) {
+        console.log(`Ignoring bot's own non-command message from ${senderNumber}`);
+        return null;
     }
-    if (!userMessageQueue[senderNumber]) {
-        userMessageQueue[senderNumber] = [];
+
+    if (!userMessageQueues[senderNumber]) {
+        userMessageQueues[senderNumber] = [];
     }
 
     let messageToStore = '';
@@ -512,30 +522,32 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
         messageToStore = message.body || `A message of type ${message.type} was received`;
     }
 
-    if (userProcessingStatus[senderNumber]) {
-        userMessageQueue[senderNumber].push(messageToStore);
-        return null; // No immediate response
-    } else {
-        userMessages[senderNumber].push(messageToStore);
-        return await processUserMessages(client, assistantOrOpenAI, senderNumber);
+    userMessageQueues[senderNumber].push(messageToStore);
+
+    // If there's no processing timer for this user, set one
+    if (!userProcessingTimers[senderNumber]) {
+        const delay = getRandomDelay();
+        userProcessingTimers[senderNumber] = setTimeout(() => {
+            processUserMessages(client, assistantOrOpenAI, senderNumber);
+        }, delay);
     }
+
+    return null; // No immediate response
 }
 
 async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
-    if (userMessages[senderNumber].length === 0) return null;
+    if (userMessageQueues[senderNumber].length === 0) return;
 
-    userProcessingStatus[senderNumber] = true;
-
-    const combinedMessage = userMessages[senderNumber].join('\n');
+    const combinedMessage = userMessageQueues[senderNumber].join('\n');
     const isVoiceMessage = combinedMessage.startsWith('Transcribed voice message:');
-    userMessages[senderNumber] = []; // Clear the messages
+    userMessageQueues[senderNumber] = []; // Clear the queue
 
     try {
         const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, combinedMessage);
-        
+
         // Send text response for all message types
         await client.sendMessage(`${senderNumber}@c.us`, response);
-        
+
         // Generate and send audio response only for voice messages
         if (isVoiceMessage) {
             const audioBuffer = await generateAudioResponse(assistantOrOpenAI, response);
@@ -543,22 +555,24 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
             await client.sendMessage(`${senderNumber}@c.us`, media, { sendAudioAsVoice: true });
         }
 
-        userProcessingStatus[senderNumber] = false;
+        // Clear the processing timer
+        delete userProcessingTimers[senderNumber];
 
-        // Process any queued messages
-        if (userMessageQueue[senderNumber].length > 0) {
-            userMessages[senderNumber] = userMessageQueue[senderNumber];
-            userMessageQueue[senderNumber] = [];
-            processUserMessages(client, assistantOrOpenAI, senderNumber);
+        // If there are more messages in the queue, set a new timer
+        if (userMessageQueues[senderNumber].length > 0) {
+            const delay = getRandomDelay();
+            userProcessingTimers[senderNumber] = setTimeout(() => {
+                processUserMessages(client, assistantOrOpenAI, senderNumber);
+            }, delay);
         }
 
-        return response; // Return the response
     } catch (error) {
         console.error(`Error processing messages for ${senderNumber}: ${error.message}`);
         const errorResponse = "Sorry, an error occurred while processing your messages.";
         await client.sendMessage(`${senderNumber}@c.us`, errorResponse);
-        userProcessingStatus[senderNumber] = false;
-        return errorResponse; // Return the error response
+        
+        // Clear the processing timer
+        delete userProcessingTimers[senderNumber];
     }
 }
 
