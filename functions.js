@@ -226,137 +226,155 @@ function hasPermission(senderNumber, command, isAdmin, isModerator) {
     return false;
 }
 
-async function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin, isModerator) {
+async function handleCommand(client, assistantOrOpenAI, message, senderNumber, isAdmin, isModerator, stopBot, startBot) {
     try {
-        // Extract the assistant key without converting to lowercase
         let messageText = message.body.trim();
         const [command, ...args] = messageText.split(' ');
-
-        // Convert only the command to lowercase, keep assistant key as it is
         const lowerCommand = command.toLowerCase();
 
-        if (ignoreList.has(senderNumber) && lowerCommand !== '!!sub' && lowerCommand !== '!!bot') {
-            return;
+        if (ignoreList.has(senderNumber) && !['!!sub', '!!bot', '!!ai-assist'].includes(lowerCommand)) {
+            return null;
         }
 
         if (lowerCommand.startsWith('!!')) {
             if (lowerCommand === '!!show-menu') {
-                // Allow all users to access the show-menu command
-                message.reply(showMenu(isAdmin, isModerator));
+                return showMenu(isAdmin, isModerator);
             } else if (hasPermission(senderNumber, lowerCommand, isAdmin, isModerator)) {
                 switch (lowerCommand) {
                     case '!!set-key':
                         const newAssistantKey = extractQuotedString(args.join(' '));
                         if (newAssistantKey) {
                             assistantKey = newAssistantKey;
-                            message.reply('Assistant key has been updated.');
+                            return 'Assistant key has been updated.';
                         } else {
-                            message.reply('Please provide a valid assistant key using !!set-key "YourKey".');
+                            return 'Please provide a valid assistant key using !!set-key "YourKey".';
                         }
-                        break;
 
                     case '!!add-mod':
                         const newModerator = extractQuotedString(args.join(' '));
                         if (newModerator) {
                             addModerator(newModerator);
-                            message.reply(`${newModerator} is now a moderator.`);
+                            return `${newModerator} is now a moderator.`;
                         } else {
-                            message.reply('Please specify the number to add as a moderator: !!add-mod "number".');
+                            return 'Please specify the number to add as a moderator: !!add-mod "number".';
                         }
-                        break;
 
                     case '!!remove-mod':
                         const moderatorToRemove = extractQuotedString(args.join(' '));
                         if (moderatorToRemove) {
                             removeModerator(moderatorToRemove);
-                            message.reply(`${moderatorToRemove} is no longer a moderator.`);
+                            return `${moderatorToRemove} is no longer a moderator.`;
                         } else {
-                            message.reply('Please specify the number to remove as a moderator: !!remove-mod "number".');
+                            return 'Please specify the number to remove as a moderator: !!remove-mod "number".';
                         }
-                        break;
 
                     case '!!list-mods':
                         const moderatorsList = checkModerators();
-                        message.reply(`Current moderators are: ${moderatorsList.join(', ')}`);
-                        break;
+                        return `Current moderators are: ${moderatorsList.join(', ')}`;
 
                     case '!!set-limit':
                         const [targetNumber, newLimit] = extractMultipleQuotedStrings(args.join(' '));
                         if (targetNumber && newLimit) {
                             setUserMessageLimit(targetNumber, parseInt(newLimit, 10));
-                            message.reply(`Message limit for ${targetNumber} has been set to ${newLimit}.`);
+                            return `Message limit for ${targetNumber} has been set to ${newLimit}.`;
                         } else {
-                            message.reply('Please use the correct format: !!set-limit "number" "limit".');
+                            return 'Please use the correct format: !!set-limit "number" "limit".';
                         }
-                        break;
 
                     case '!!remove-limit':
                         NO_LIMIT = true;
-                        message.reply('Message limit has been removed for all users.');
-                        break;
+                        return 'Message limit has been removed for all users.';
 
                     case '!!enforce-limit':
                         NO_LIMIT = false;
                         resetUserMessageLimits();
-                        message.reply('Message limit has been enforced for all users.');
-                        break;
+                        return 'Message limit has been enforced for all users.';
 
                     case '!!clear-threads':
                         clearAllThreads();
-                        message.reply('All threads have been cleared.');
-                        break;
+                        return 'All threads have been cleared.';
 
                     case '!!show-menu':
                         if (isAdmin) {
-                            message.reply(showMenu(true, false)); // Admin menu
+                            return showMenu(true, false); // Admin menu
                         } else if (isModerator) {
-                            message.reply(showMenu(false, true)); // Moderator menu
+                            return showMenu(false, true); // Moderator menu
                         } else {
-                            message.reply(showMenu(false, false)); // User menu
+                            return showMenu(false, false); // User menu
                         }
-                        break;
-
 
                     case '!!un-sub':
                     case '!!live-chat':
                         ignoreList.add(senderNumber);
-                        message.reply('You have been unsubscribed from receiving messages from this Ai Assistant.\n- Use !!sub or !!bot to Subscribe Ai Assistant again.');
-                        break;
+                        return 'You have been unsubscribed from receiving messages from this Ai Assistant.\n- Use !!sub or !!bot to Subscribe Ai Assistant again.';
 
                     case '!!sub':
                     case '!!bot':
                         ignoreList.delete(senderNumber);
-                        message.reply('You have been re-subscribed to receive messages from this Ai Assistant.\n- Use !!live-chat or !!un-sub to  UnSubscribe Ai Assistant');
-                        break;
+                        return 'You have been re-subscribed to receive messages from this Ai Assistant.\n- Use !!live-chat or !!un-sub to  UnSubscribe Ai Assistant';
+
+                    case '!!pause':
+                        if (isAdmin || isModerator) {
+                            stopBot();
+                            return 'Bot has been paused.';
+                        } else {
+                            return "You don't have permission to use this command.";
+                        }
+
+                    case '!!start':
+                        if (isAdmin || isModerator) {
+                            startBot();
+                            return 'Bot has been started.';
+                        } else {
+                            return "You don't have permission to use this command.";
+                        }
+
+                    case '!!no-assist':
+                        if (isAdmin || isModerator) {
+                            const chat = await message.getChat();
+                            if (chat.isGroup) {
+                                return "This command cannot be used in a group chat.";
+                            }
+                            const recipientNumber = chat.id.user;
+                            addToIgnoreList(recipientNumber);
+                            return `AI assistance disabled for ${recipientNumber}.`;
+                        } else {
+                            return "You don't have permission to use this command.";
+                        }
+
+                    case '!!ai-assist':
+                        if (isAdmin || isModerator) {
+                            const chat = await message.getChat();
+                            if (chat.isGroup) {
+                                return "This command cannot be used in a group chat.";
+                            }
+                            const recipientNumber = chat.id.user;
+                            removeFromIgnoreList(recipientNumber);
+                            return `AI assistance enabled for ${recipientNumber}.`;
+                        } else {
+                            return "You don't have permission to use this command.";
+                        }
 
                     default:
-                        message.reply("Unknown command. Please check the available commands using !!show-menu.");
-                        break;
+                        return "Unknown command. Please check the available commands using !!show-menu.";
                 }
             } else {
-                message.reply("You don't have permission to use this command.");
+                return "You don't have permission to use this command.";
             }
         } else {
             if (!ignoreList.has(senderNumber) && checkMessageLimit(senderNumber, isAdmin)) {
                 trackUserMessage(senderNumber);
-                storeUserMessage(client, assistantOrOpenAI, senderNumber, message);
-
-                // Remove the inactivity timer logic
-                // if (userInactivityTimers[senderNumber]) {
-                //     clearTimeout(userInactivityTimers[senderNumber]);
-                //     delete userInactivityTimers[senderNumber];
-                // }
+                const response = await storeUserMessage(client, assistantOrOpenAI, senderNumber, message);
+                return response; // Return the response
             } else if (!ignoreList.has(senderNumber)) {
-                message.reply(`Your message limit for today has been reached.\n- Please try again tomorrow or contact an admin to reset your limit.`);
+                const response = `Your message limit for today has been reached.\n- Please try again tomorrow or contact an admin to reset your limit.`;
+                message.reply(response);
+                return response; // Return the response
             }
         }
     } catch (error) {
         console.error(`Error in handleCommand: ${error.message}`);
-        try {
-            await message.reply("An error occurred while processing your message. Our team has been notified.");
-        } catch (replyError) {
-            console.error(`Failed to send error reply: ${replyError.message}`);
-        }
+        return "An error occurred while processing your message. Our team has been notified.";
     }
 }
 
@@ -426,7 +444,9 @@ function showMenu(isAdmin, isModerator) {
 - !!sub: Resubscribe to receive messages
 - !!show-menu: Show the command menu
 - !!start: Start the bot
-- !!pause: Stop the bot
+- !!pause: Pause the bot
+- !!no-assist: Disable AI assistance for a number
+- !!ai-assist: Enable AI assistance for a number
             `;
         } else if (isModerator) {
             return `
@@ -435,7 +455,9 @@ function showMenu(isAdmin, isModerator) {
 - !!sub: Resubscribe to receive messages
 - !!show-menu: Show the command menu
 - !!start: Start the bot
-- !!pause: Stop the bot
+- !!pause: Pause the bot
+- !!no-assist: Disable AI assistance for a number
+- !!ai-assist: Enable AI assistance for a number
             `;
         } else {
             return `
@@ -484,24 +506,23 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
     } else if (message.type === 'image') {
         // Ignore pictures
         console.log(`Ignored ${message.type} message from ${senderNumber}`);
-        return;
+        return null; // No immediate response
     } else {
         // For text messages and other types
         messageToStore = message.body || `A message of type ${message.type} was received`;
     }
 
     if (userProcessingStatus[senderNumber]) {
-        // If a message is being processed, add this message to the queue
         userMessageQueue[senderNumber].push(messageToStore);
+        return null; // No immediate response
     } else {
-        // If no message is being processed, process this message immediately
         userMessages[senderNumber].push(messageToStore);
-        processUserMessages(client, assistantOrOpenAI, senderNumber);
+        return await processUserMessages(client, assistantOrOpenAI, senderNumber);
     }
 }
 
 async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
-    if (userMessages[senderNumber].length === 0) return;
+    if (userMessages[senderNumber].length === 0) return null;
 
     userProcessingStatus[senderNumber] = true;
 
@@ -521,18 +542,23 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
             const media = new MessageMedia('audio/ogg', audioBuffer.toString('base64'), 'response.ogg');
             await client.sendMessage(`${senderNumber}@c.us`, media, { sendAudioAsVoice: true });
         }
+
+        userProcessingStatus[senderNumber] = false;
+
+        // Process any queued messages
+        if (userMessageQueue[senderNumber].length > 0) {
+            userMessages[senderNumber] = userMessageQueue[senderNumber];
+            userMessageQueue[senderNumber] = [];
+            processUserMessages(client, assistantOrOpenAI, senderNumber);
+        }
+
+        return response; // Return the response
     } catch (error) {
         console.error(`Error processing messages for ${senderNumber}: ${error.message}`);
-        await client.sendMessage(`${senderNumber}@c.us`, "Sorry, an error occurred while processing your messages.");
-    }
-
-    userProcessingStatus[senderNumber] = false;
-
-    // Process any queued messages
-    if (userMessageQueue[senderNumber].length > 0) {
-        userMessages[senderNumber] = userMessageQueue[senderNumber];
-        userMessageQueue[senderNumber] = [];
-        processUserMessages(client, assistantOrOpenAI, senderNumber);
+        const errorResponse = "Sorry, an error occurred while processing your messages.";
+        await client.sendMessage(`${senderNumber}@c.us`, errorResponse);
+        userProcessingStatus[senderNumber] = false;
+        return errorResponse; // Return the error response
     }
 }
 
@@ -562,6 +588,18 @@ async function generateAudioResponse(assistantOrOpenAI, text) {
     return buffer;
 }
 
+function isIgnored(senderNumber) {
+    return ignoreList.has(senderNumber);
+}
+
+function addToIgnoreList(number) {
+    ignoreList.add(number);
+}
+
+function removeFromIgnoreList(number) {
+    ignoreList.delete(number);
+}
+
 module.exports = {
     showMenu,
     parseTimeString,
@@ -579,4 +617,7 @@ module.exports = {
     processUserMessages,
     transcribeAudio,
     generateAudioResponse,
+    isIgnored,
+    addToIgnoreList,
+    removeFromIgnoreList,
 };
