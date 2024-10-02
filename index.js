@@ -16,7 +16,7 @@ const client = new Client({
     }
 });
 
-const adminNumber = ['923499490427', '436765191901'];
+const adminNumber = ['923499490427'];
 console.log(adminNumber); // Example usage
 let isBotActive = true; // Control the bot's active state
 
