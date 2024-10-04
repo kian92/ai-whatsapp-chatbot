@@ -108,25 +108,21 @@ async function processMessage(message) {
     const isModerator = functions.isModerator(senderNumber);
     const isBot = senderNumber === botNumber;
 
-    console.log(`Processing message from ${senderNumber}. isAdmin: ${isAdmin}, isModerator: ${isModerator}, isBot: ${isBot}`);
 
     if (messageText.toLowerCase().startsWith('!!')) {
-        console.log(`Detected command: ${messageText}`);
         const response = await functions.handleCommand(client, assistant, message, senderNumber, isAdmin, isModerator, stopBot, startBot);
-        console.log(`Command response: ${response}`);
         if (response && !isBot) {
             await client.sendMessage(senderId, response);
         }
     } else if (isBotActive && !isBot) {
         // Check if the sender is in the ignore list
         if (functions.isIgnored(senderNumber)) {
-            console.log(`Ignoring message from ${senderNumber} as they are in the ignore list`);
         } else {
             // Store the message for processing with a delay
             await functions.storeUserMessage(client, assistant, senderNumber, message);
         }
     } else if (isBot) {
-        console.log(`Received bot's own message: ${messageText}`);
+        // No action needed for bot's own message
     }
 }
 

@@ -395,7 +395,6 @@ function showMenu(isAdmin, isModerator) {
 async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message) {
     // Check if the sender is the bot itself or in the ignore list
     if (senderNumber === client.info.wid.user || isIgnored(senderNumber)) {
-        console.log(`Ignoring message from ${senderNumber}`);
         return null;
     }
 
