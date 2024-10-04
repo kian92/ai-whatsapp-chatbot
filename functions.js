@@ -487,7 +487,7 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
 }
 
 async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
-    if (userMessageQueues[senderNumber].length === 0) return;
+    if (!senderNumber || userMessageQueues[senderNumber].length === 0) return;
 
     const combinedMessage = userMessageQueues[senderNumber].join('\n');
     const isVoiceMessage = combinedMessage.startsWith('Transcribed voice message:');
@@ -496,16 +496,32 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
     try {
         const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, combinedMessage);
 
+        // Validate senderNumber format
+        const formattedSenderNumber = `${senderNumber}@c.us`;
+        if (!formattedSenderNumber.match(/^\d+@c\.us$/)) {
+            throw new Error(`Invalid sender number format: ${formattedSenderNumber}`);
+        }
+
         // Send text response for all message types
-        await client.sendMessage(`${senderNumber}@c.us`, response);
+        await client.sendMessage(formattedSenderNumber, response);
 
         // Generate and send audio response only for voice messages
         if (isVoiceMessage) {
             const audioBuffer = await generateAudioResponse(assistantOrOpenAI, response);
             const media = new MessageMedia('audio/ogg', audioBuffer.toString('base64'), 'response.ogg');
-            await client.sendMessage(`${senderNumber}@c.us`, media, { sendAudioAsVoice: true });
+            await client.sendMessage(formattedSenderNumber, media, { sendAudioAsVoice: true });
         }
 
+    } catch (error) {
+        if (error.message.includes('invalid wid')) {
+            console.warn(`Invalid WID error for ${senderNumber}: ${error.message}`);
+            // Optionally, you can add logic to handle this specific error, such as notifying an admin
+        } else {
+            console.error(`Error processing messages for ${senderNumber}: ${error.message}`);
+            const errorResponse = "Sorry, an error occurred while processing your messages.";
+            await client.sendMessage(`${senderNumber}@c.us`, errorResponse);
+        }
+    } finally {
         // Clear the processing timer
         delete userProcessingTimers[senderNumber];
 
@@ -516,14 +532,6 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
                 processUserMessages(client, assistantOrOpenAI, senderNumber);
             }, delay);
         }
-
-    } catch (error) {
-        console.error(`Error processing messages for ${senderNumber}: ${error.message}`);
-        const errorResponse = "Sorry, an error occurred while processing your messages.";
-        await client.sendMessage(`${senderNumber}@c.us`, errorResponse);
-
-        // Clear the processing timer
-        delete userProcessingTimers[senderNumber];
     }
 }
 
