@@ -487,7 +487,8 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
 }
 
 async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
-    if (!senderNumber || userMessageQueues[senderNumber].length === 0) return;
+    // Ignore messages from "status"
+    if (senderNumber === 'status' || !senderNumber || userMessageQueues[senderNumber].length === 0) return;
 
     const combinedMessage = userMessageQueues[senderNumber].join('\n');
     const isVoiceMessage = combinedMessage.startsWith('Transcribed voice message:');
