@@ -60,6 +60,9 @@ client.on('ready', () => {
         console.log(`Bot number ${botNumber} added to admin list.`);
     }
     
+    // Load the ignore list
+    functions.loadIgnoreList();
+    
     // Start the periodic check for new messages
     setInterval(checkForNewMessages, 1000);
 });
@@ -99,7 +102,7 @@ async function processMessage(message) {
 
     const senderId = message.from;
     const senderNumber = senderId.split('@')[0];
-    const messageText = message.body;
+    const messageText = message.body || ''; // Add a default empty string if body is undefined
 
     const isAdmin = adminNumber.includes(senderNumber);
     const isModerator = functions.isModerator(senderNumber);
@@ -136,6 +139,3 @@ client.on('error', (error) => {
 });
 
 client.initialize();
-
-
-

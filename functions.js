@@ -1,12 +1,8 @@
 const POLLING_INTERVAL = 1000;
 const MAX_RETRIES = 60;
-const userMessageCounts = {};
-let NO_LIMIT = false;
 const moderators = new Set(); // Add any default moderator numbers here
-const ignoreList = new Set();
 let assistantKey = 'asst_ze2PHjbK3g1MwGuEW36LgVwF';
 const userThreads = {};
-const DEFAULT_MESSAGE_LIMIT = 1000; // Added default message limit
 const userMessages = {};
 const userMessageQueue = {};
 const userProcessingStatus = {};
@@ -14,9 +10,54 @@ const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
 const { MessageMedia } = require('whatsapp-web.js');
+const path = require('path');
 
 const userMessageQueues = {};
 const userProcessingTimers = {};
+
+// Add these constants at the top of the file
+const IGNORE_LIST_FILE = path.join(__dirname, 'ignore_list.json');
+const ignoreList = new Set();
+
+// Add these functions to handle saving and loading the ignore list
+
+function saveIgnoreList() {
+    const ignoreArray = Array.from(ignoreList);
+    fs.writeFileSync(IGNORE_LIST_FILE, JSON.stringify(ignoreArray), 'utf8');
+}
+
+function loadIgnoreList() {
+    try {
+        if (fs.existsSync(IGNORE_LIST_FILE)) {
+            const data = fs.readFileSync(IGNORE_LIST_FILE, 'utf8');
+            const ignoreArray = JSON.parse(data);
+            ignoreList.clear();
+            ignoreArray.forEach(number => ignoreList.add(number));
+            console.log('Ignore list loaded successfully:', Array.from(ignoreList));
+        } else {
+            console.log('No ignore list file found. Starting with an empty list.');
+        }
+    } catch (error) {
+        console.error('Error loading ignore list:', error);
+    }
+}
+
+// Modify the addToIgnoreList function
+function addToIgnoreList(number) {
+    ignoreList.add(number);
+    saveIgnoreList();
+}
+
+// Modify the removeFromIgnoreList function
+function removeFromIgnoreList(number) {
+    ignoreList.delete(number);
+    saveIgnoreList();
+}
+
+// Add this function to check if a number is in the ignore list
+function isIgnored(number) {
+    return ignoreList.has(number);
+}
 
 // Add this function to generate a random delay between 10 and 30 seconds
 function getRandomDelay() {
@@ -40,58 +81,6 @@ async function sendMessageWithValidation(client, number, message, senderNumber) 
         } catch (secondaryError) {
             console.error(`Failed to notify the sender about the failure: ${secondaryError.message}`);
         }
-    }
-}
-
-function checkMessageLimit(senderNumber, isAdmin) {
-    try {
-        if (NO_LIMIT || isAdmin || isModerator(senderNumber)) return true;
-
-        // Initialize user data if it doesn't exist
-        if (!userMessageCounts[senderNumber]) {
-            userMessageCounts[senderNumber] = {
-                count: 0,
-                firstMessageTime: Date.now(),
-                maxLimit: DEFAULT_MESSAGE_LIMIT
-            };
-        }
-
-        const userLimit = userMessageCounts[senderNumber].maxLimit;
-        return userMessageCounts[senderNumber].count < userLimit;
-    } catch (error) {
-        console.error(`Error in checkMessageLimit: ${error.message}`);
-        return false;
-    }
-}
-function trackUserMessage(senderNumber) {
-    try {
-        const currentTime = Date.now();
-
-        // Ensure userMessageCounts for this user is initialized
-        if (!userMessageCounts[senderNumber]) {
-            userMessageCounts[senderNumber] = {
-                count: 0,
-                firstMessageTime: currentTime,
-                maxLimit: DEFAULT_MESSAGE_LIMIT
-            };
-        }
-
-        // Calculate the time difference
-        const timeDiff = currentTime - userMessageCounts[senderNumber].firstMessageTime;
-
-        // If 24 hours have passed, reset the message count and update the firstMessageTime
-        if (timeDiff > 24 * 60 * 60 * 1000) {
-            userMessageCounts[senderNumber].count = 0;
-            userMessageCounts[senderNumber].firstMessageTime = currentTime;
-        }
-
-        // Increment the message count
-        userMessageCounts[senderNumber].count += 1;
-
-        // Print the number of messages the user has sent in the last 24 hours
-        // console.log(`User ${senderNumber} has sent ${userMessageCounts[senderNumber].count} messages in the last 24 hours. Message limit: ${userMessageCounts[senderNumber].maxLimit}`);
-    } catch (error) {
-        console.error(`Error in trackUserMessage: ${error.message}`);
     }
 }
 
@@ -239,10 +228,6 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
         const [command, ...args] = messageText.split(' ');
         const lowerCommand = command.toLowerCase();
 
-        if (ignoreList.has(senderNumber) && !['!!sub', '!!bot', '!!ai-assist'].includes(lowerCommand)) {
-            return null;
-        }
-
         if (lowerCommand.startsWith('!!')) {
             if (lowerCommand === '!!show-menu') {
                 return showMenu(isAdmin, isModerator);
@@ -279,24 +264,6 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                         const moderatorsList = checkModerators();
                         return `Current moderators are: ${moderatorsList.join(', ')}`;
 
-                    case '!!set-limit':
-                        const [targetNumber, newLimit] = extractMultipleQuotedStrings(args.join(' '));
-                        if (targetNumber && newLimit) {
-                            setUserMessageLimit(targetNumber, parseInt(newLimit, 10));
-                            return `Message limit for ${targetNumber} has been set to ${newLimit}.`;
-                        } else {
-                            return 'Please use the correct format: !!set-limit "number" "limit".';
-                        }
-
-                    case '!!remove-limit':
-                        NO_LIMIT = true;
-                        return 'Message limit has been removed for all users.';
-
-                    case '!!enforce-limit':
-                        NO_LIMIT = false;
-                        resetUserMessageLimits();
-                        return 'Message limit has been enforced for all users.';
-
                     case '!!clear-threads':
                         clearAllThreads();
                         return 'All threads have been cleared.';
@@ -309,16 +276,6 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                         } else {
                             return showMenu(false, false); // User menu
                         }
-
-                    case '!!un-sub':
-                    case '!!live-chat':
-                        ignoreList.add(senderNumber);
-                        return 'You have been unsubscribed from receiving messages from this Ai Assistant.\n- Use !!sub or !!bot to Subscribe Ai Assistant again.';
-
-                    case '!!sub':
-                    case '!!bot':
-                        ignoreList.delete(senderNumber);
-                        return 'You have been re-subscribed to receive messages from this Ai Assistant.\n- Use !!live-chat or !!un-sub to  UnSubscribe Ai Assistant';
 
                     case '!!pause':
                         if (isAdmin || isModerator) {
@@ -369,15 +326,8 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                 return "You don't have permission to use this command.";
             }
         } else {
-            if (!ignoreList.has(senderNumber) && checkMessageLimit(senderNumber, isAdmin)) {
-                trackUserMessage(senderNumber);
-                const response = await storeUserMessage(client, assistantOrOpenAI, senderNumber, message);
-                return response; // Return the response
-            } else if (!ignoreList.has(senderNumber)) {
-                const response = `Your message limit for today has been reached.\n- Please try again tomorrow or contact an admin to reset your limit.`;
-                message.reply(response);
-                return response; // Return the response
-            }
+            const response = await storeUserMessage(client, assistantOrOpenAI, senderNumber, message);
+            return response;
         }
     } catch (error) {
         console.error(`Error in handleCommand: ${error.message}`);
@@ -405,35 +355,6 @@ function extractMultipleQuotedStrings(text) {
     }
 }
 
-function setUserMessageLimit(number, limit) {
-    try {
-        if (!number || isNaN(limit)) {
-            throw new Error('Invalid input for setting message limit.');
-        }
-        if (!userMessageCounts[number]) {
-            userMessageCounts[number] = {
-                count: 0,
-                firstMessageTime: Date.now(),
-                maxLimit: limit
-            };
-        } else {
-            userMessageCounts[number].maxLimit = limit;
-        }
-    } catch (error) {
-        console.error(`Error in setUserMessageLimit: ${error.message}`);
-    }
-}
-
-function resetUserMessageLimits() {
-    try {
-        for (let user in userMessageCounts) {
-            userMessageCounts[user].maxLimit = DEFAULT_MESSAGE_LIMIT;
-        }
-    } catch (error) {
-        console.error(`Error in resetUserMessageLimits: ${error.message}`);
-    }
-}
-
 function showMenu(isAdmin, isModerator) {
     try {
         if (isAdmin) {
@@ -443,12 +364,7 @@ function showMenu(isAdmin, isModerator) {
 - !!add-mod: Add a moderator
 - !!remove-mod: Remove a moderator
 - !!list-mods: List all current moderators
-- !!set-limit: Set a message limit for a user
-- !!remove-limit: Remove message limits for all users
-- !!enforce-limit: Reinstate message limits for all users
 - !!clear-threads: Clear all threads
-- !!un-sub: Unsubscribe from receiving messages
-- !!sub: Resubscribe to receive messages
 - !!show-menu: Show the command menu
 - !!start: Start the bot
 - !!pause: Pause the bot
@@ -458,8 +374,6 @@ function showMenu(isAdmin, isModerator) {
         } else if (isModerator) {
             return `
 *Commands Menu (Moderator):*
-- !!un-sub: Unsubscribe from receiving messages
-- !!sub: Resubscribe to receive messages
 - !!show-menu: Show the command menu
 - !!start: Start the bot
 - !!pause: Pause the bot
@@ -469,10 +383,6 @@ function showMenu(isAdmin, isModerator) {
         } else {
             return `
 *Commands Menu (User):*
-- !!un-sub: Unsubscribe from receiving Ai Assistant messages
-- !!live-chat: Unsubscribe from Ai Assistant receiving messages (same as !!un-sub)
-- !!sub: Resubscribe to receive Ai Assistant messages
-- !!bot: Resubscribe to receive Ai Assistant messages (same as !!sub)
 - !!show-menu: Show the command menu
             `;
         }
@@ -483,9 +393,9 @@ function showMenu(isAdmin, isModerator) {
 }
 
 async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message) {
-    // Check if the sender is the bot itself
-    if (senderNumber === client.info.wid.user) {
-        console.log(`Ignoring bot's own non-command message from ${senderNumber}`);
+    // Check if the sender is the bot itself or in the ignore list
+    if (senderNumber === client.info.wid.user || isIgnored(senderNumber)) {
+        console.log(`Ignoring message from ${senderNumber}`);
         return null;
     }
 
@@ -602,18 +512,6 @@ async function generateAudioResponse(assistantOrOpenAI, text) {
     return buffer;
 }
 
-function isIgnored(senderNumber) {
-    return ignoreList.has(senderNumber);
-}
-
-function addToIgnoreList(number) {
-    ignoreList.add(number);
-}
-
-function removeFromIgnoreList(number) {
-    ignoreList.delete(number);
-}
-
 module.exports = {
     showMenu,
     parseTimeString,
@@ -625,12 +523,11 @@ module.exports = {
     handleCommand,
     sleep,
     clearAllThreads,
-    trackUserMessage,
-    checkMessageLimit,
     storeUserMessage,
     processUserMessages,
     transcribeAudio,
     generateAudioResponse,
+    loadIgnoreList,
     isIgnored,
     addToIgnoreList,
     removeFromIgnoreList,
