@@ -5,7 +5,7 @@ const OpenAI = require('openai');
 const functions = require('./functions');
 
 const assistant = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPENAI_API_KEY,
 });
 
 const client = new Client({
@@ -53,16 +53,16 @@ client.on('ready', () => {
     console.log('Client is ready!');
     botNumber = client.info.wid.user; // Get the bot's own number
     console.log(`Bot number: ${botNumber}`);
-    
+
     // Add the bot number to the list of admin numbers
     if (!adminNumber.includes(botNumber)) {
         adminNumber.push(botNumber);
         console.log(`Bot number ${botNumber} added to admin list.`);
     }
-    
+
     // Load the ignore list
     functions.loadIgnoreList();
-    
+
     // Start the periodic check for new messages
     setInterval(checkForNewMessages, 1000);
 });
@@ -70,17 +70,17 @@ client.on('ready', () => {
 async function checkForNewMessages() {
     try {
         const chat = await client.getChatById(`${botNumber}@c.us`);
-        const messages = await chat.fetchMessages({limit: 1});
-        
+        const messages = await chat.fetchMessages({ limit: 1 });
+
         if (messages.length > 0) {
             const latestMessage = messages[0];
-            
+
             // Only process messages from the bot's number
             if (latestMessage.from === `${botNumber}@c.us`) {
                 // Check if this message is newer than the last processed message and hasn't been processed yet
                 if (latestMessage.timestamp > lastProcessedMessageTime && !processedMessageIds.has(latestMessage.id._serialized)) {
                     lastProcessedMessageTime = latestMessage.timestamp;
-                    
+
                     // Process the message
                     await processMessage(latestMessage);
                 }
@@ -108,7 +108,6 @@ async function processMessage(message) {
     const isModerator = functions.isModerator(senderNumber);
     const isBot = senderNumber === botNumber;
 
-
     if (messageText.toLowerCase().startsWith('!!')) {
         const response = await functions.handleCommand(client, assistant, message, senderNumber, isAdmin, isModerator, stopBot, startBot);
         if (response && !isBot) {
@@ -117,9 +116,17 @@ async function processMessage(message) {
     } else if (isBotActive && !isBot) {
         // Check if the sender is in the ignore list
         if (functions.isIgnored(senderNumber)) {
+            // Do nothing if the user is in the ignore list
         } else {
             // Store the message for processing with a delay
-            await functions.storeUserMessage(client, assistant, senderNumber, message);
+            const response = await functions.storeUserMessage(client, assistant, senderNumber, message);
+
+            // Log the response from OpenAI
+
+            // Directly send the response if it exists
+            if (response) {
+                await client.sendMessage(senderId, response);
+            }
         }
     } else if (isBot) {
         // No action needed for bot's own message

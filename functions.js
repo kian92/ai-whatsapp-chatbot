@@ -128,16 +128,49 @@ async function generateResponseOpenAI(assistant, senderNumber, userMessage) {
         });
 
         const run = await assistant.beta.threads.runs.create(threadId, {
-            assistant_id: assistantKey // Use the latest assistant key here
+            assistant_id: assistantKey,
+            // Remove the tools parameter from here
         });
 
         await pollRunStatus(assistant, threadId, run.id);
 
-        const messageResponse = await assistant.beta.threads.messages.list(threadId);
-        const messages = messageResponse.data;
-        const latestMessage = messages[0];
+        const messages = await assistant.beta.threads.messages.list(threadId);
+        const latestMessage = messages.data[0];
 
-        return latestMessage.content[0].text.value.trim();
+        let response = '';
+        let shouldScheduleAppointment = false;
+
+        if (latestMessage.content && latestMessage.content.length > 0) {
+            for (const content of latestMessage.content) {
+                if (content.type === 'text') {
+                    response += content.text.value.trim() + ' ';
+                } else if (content.type === 'tool_calls') {
+                    for (const toolCall of content.tool_calls) {
+                        if (toolCall.function.name === 'scheduleAppointment') {
+                            const args = JSON.parse(toolCall.function.arguments);
+                            if (args.schedule) {
+                                shouldScheduleAppointment = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (shouldScheduleAppointment) {
+            const appointmentResponse = await scheduleAppointment(senderNumber);
+            response += appointmentResponse + ' ';
+        }
+
+        // Check if the response is "interested" or "Interested"
+        if (["interested", "Interested"].includes(response.trim())) {
+            addToIgnoreList(senderNumber);
+            response = "Thank you for showing interest in scheduling a meeting. We will contact you shortly to confirm.";
+        }
+
+        // Log the generated response
+
+        return response.trim() || "I'm sorry, I couldn't generate a response.";
     } catch (error) {
         console.error(`Error in generateResponseOpenAI: ${error.message}`);
         return "Sorry, something went wrong while processing your request.";
@@ -417,11 +450,18 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
         }
     } else if (message.type === 'document') {
         const mimeType = message.mimetype;
-        if (mimeType === 'application/pdf' || (mimeType && mimeType.includes('word'))) {
-            messageToStore = "CV is sent. " + (message.body || '');
+        let documentType;
+        if (mimeType === 'application/pdf') {
+            documentType = 'PDF';
+        } else if (mimeType && mimeType.includes('word')) {
+            documentType = 'Word document';
         } else {
-            messageToStore = `A document of type ${mimeType} was sent. ` + (message.body || '');
+            documentType = `document of type ${mimeType}`;
         }
+
+        const response = await handleDocument(documentType, senderNumber);
+        await client.sendMessage(`${senderNumber}@c.us`, response);
+        return null;
     } else if (message.type === 'image') {
         // Ignore pictures
         console.log(`Ignored ${message.type} message from ${senderNumber}`);
@@ -440,6 +480,8 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
             processUserMessages(client, assistantOrOpenAI, senderNumber);
         }, delay);
     }
+
+    // Log the message to be stored
 
     return null; // No immediate response
 }
@@ -479,7 +521,7 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
         console.error(`Error processing messages for ${senderNumber}: ${error.message}`);
         const errorResponse = "Sorry, an error occurred while processing your messages.";
         await client.sendMessage(`${senderNumber}@c.us`, errorResponse);
-        
+
         // Clear the processing timer
         delete userProcessingTimers[senderNumber];
     }
@@ -511,6 +553,19 @@ async function generateAudioResponse(assistantOrOpenAI, text) {
     return buffer;
 }
 
+// Add these new functions
+async function handleDocument(documentType, senderNumber) {
+    console.log(`Handling document of type ${documentType} from ${senderNumber}`);
+    addToIgnoreList(senderNumber);
+    return `Thank you for sending the Document. Our team will review it and get back to you soon.`;
+}
+
+async function scheduleAppointment(senderNumber) {
+    console.log(`Scheduling appointment for ${senderNumber}`);
+    addToIgnoreList(senderNumber);
+    return "Thank you for your interest in scheduling an appointment. Our team will contact you shortly at this number to arrange a suitable time. If you have any specific preferences or requirements, please let us know when we reach out to you.";
+}
+
 module.exports = {
     showMenu,
     parseTimeString,
@@ -530,4 +585,6 @@ module.exports = {
     isIgnored,
     addToIgnoreList,
     removeFromIgnoreList,
+    handleDocument,
+    scheduleAppointment,
 };
