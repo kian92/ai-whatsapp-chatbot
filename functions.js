@@ -21,27 +21,40 @@ const ignoreList = new Set();
 const SUBJECTS_FILE = path.join(__dirname, 'subjects.json');
 const subjects = {};
 const userSubjects = {};
+const userNotifiedAboutAccess = new Set();
 
 // Add these functions to handle saving and loading the ignore list
 
 function saveIgnoreList() {
     const ignoreArray = Array.from(ignoreList);
-    fs.writeFileSync(IGNORE_LIST_FILE, JSON.stringify(ignoreArray), 'utf8');
+    fs.writeFileSync(IGNORE_LIST_FILE, JSON.stringify(ignoreArray, null, 2), 'utf8');
+    console.log('Ignore list saved successfully.');
 }
 
 function loadIgnoreList() {
     try {
         if (fs.existsSync(IGNORE_LIST_FILE)) {
             const data = fs.readFileSync(IGNORE_LIST_FILE, 'utf8');
-            const ignoreArray = JSON.parse(data);
-            ignoreList.clear();
-            ignoreArray.forEach(number => ignoreList.add(number));
-            console.log('Ignore list loaded successfully:', Array.from(ignoreList));
+            if (data.trim() === '') {
+                console.log('Ignore list file is empty. Initializing with an empty array.');
+                ignoreList.clear();
+                saveIgnoreList();
+            } else {
+                const ignoreArray = JSON.parse(data);
+                ignoreList.clear();
+                ignoreArray.forEach(number => ignoreList.add(number));
+                console.log('Ignore list loaded successfully:', Array.from(ignoreList));
+            }
         } else {
-            console.log('No ignore list file found. Starting with an empty list.');
+            console.log('No ignore list file found. Creating a new one with an empty array.');
+            ignoreList.clear();
+            saveIgnoreList();
         }
     } catch (error) {
         console.error('Error loading ignore list:', error);
+        console.log('Initializing ignore list with an empty array.');
+        ignoreList.clear();
+        saveIgnoreList();
     }
 }
 
@@ -57,9 +70,9 @@ function removeFromIgnoreList(number) {
     saveIgnoreList();
 }
 
-// Add this function to check if a number is in the ignore list
+// Modify the isIgnored function
 function isIgnored(number) {
-    return ignoreList.has(number);
+    return !ignoreList.has(number);
 }
 
 async function sendMessageWithValidation(client, number, message, senderNumber) {
@@ -313,7 +326,7 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                                 return "This command cannot be used in a group chat.";
                             }
                             const recipientNumber = chat.id.user;
-                            addToIgnoreList(recipientNumber);
+                            removeFromIgnoreList(recipientNumber);
                             return `AI assistance disabled for ${recipientNumber}.`;
                         } else {
                             return "You don't have permission to use this command.";
@@ -326,8 +339,8 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                                 return "This command cannot be used in a group chat.";
                             }
                             const recipientNumber = chat.id.user;
-                            removeFromIgnoreList(recipientNumber);
-                            return getTemplateMessage(); // Send the template message after enabling AI assistance
+                            addToIgnoreList(recipientNumber);
+                            return getTemplateMessage(recipientNumber); // Send the template message after enabling AI assistance
                         } else {
                             return "You don't have permission to use this command.";
                         }
@@ -411,8 +424,13 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
         return null;
     }
 
-    // Check if the user is in the ignore list
-    if (isIgnored(senderNumber)) {
+    // Check if the user is in the ignore list (now meaning allowed to use the bot)
+    if (!ignoreList.has(senderNumber)) {
+        // Send a one-time message to users not in the ignore list
+        if (!userNotifiedAboutAccess.has(senderNumber)) {
+            await client.sendMessage(`${senderNumber}@c.us`, "Sorry, you don't have access to this bot. To request access, please contact an administrator.");
+            userNotifiedAboutAccess.add(senderNumber);
+        }
         return null;
     }
 
@@ -438,6 +456,11 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
         messageToStore = message.body || `A message of type ${message.type} was received`;
     }
 
+    // Check if the message is "!!" to show the template message
+    if (messageToStore.trim() === '!!') {
+        return getTemplateMessage(senderNumber);
+    }
+
     // Check if the message is a subject selection
     if (!userSubjects[senderNumber]) {
         const subjectNumber = parseInt(messageToStore.trim());
@@ -446,8 +469,6 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
             const selectedSubject = subjectKeys[subjectNumber - 1];
             userSubjects[senderNumber] = subjects[selectedSubject];
             return `You've selected ${selectedSubject}. You can now start chatting with the AI assistant for this subject.`;
-        } else if (messageToStore.trim() === '!!') {
-            return getTemplateMessage();
         } else {
             return 'Please select a valid subject number from the list. To see the list again, type "!!".';
         }
@@ -534,18 +555,7 @@ async function generateAudioResponse(assistantOrOpenAI, text) {
     return buffer;
 }
 
-// Add these new functions
-async function handleDocument(documentType, senderNumber) {
-    console.log(`Handling document of type ${documentType} from ${senderNumber}`);
-    // Removed: addToIgnoreList(senderNumber);
-    return `Thank you for sending the Document. Our team will review it and get back to you soon.`;
-}
-
-async function scheduleAppointment(senderNumber) {
-    console.log(`Scheduling appointment for ${senderNumber}`);
-    addToIgnoreList(senderNumber);
-    return "Thank you for your interest in scheduling an appointment. Our team will contact you shortly at this number to arrange a suitable time. If you have any specific preferences or requirements, please let us know when we reach out to you.";
-}
+// These functions have been removed as they are no longer necessary
 
 // Add this function to reload subjects
 function reloadSubjects() {
@@ -574,7 +584,8 @@ function getCurrentSubjects() {
 }
 
 // Modify the getTemplateMessage function
-function getTemplateMessage() {
+function getTemplateMessage(senderNumber) {
+    // Users in the ignore list are allowed to use the bot, so we don't need to check here
     let message = "Welcome! Please select a subject by replying with its number:\n\n";
     Object.keys(subjects).forEach((subject, index) => {
         message += `${index + 1}. ${subject}\n`;
@@ -602,8 +613,6 @@ module.exports = {
     isIgnored,
     addToIgnoreList,
     removeFromIgnoreList,
-    handleDocument,
-    scheduleAppointment,
     loadSubjects,
     getTemplateMessage,
     reloadSubjects,

@@ -120,18 +120,11 @@ async function processMessage(message) {
         if (response && !isBot) {
             await client.sendMessage(senderId, response);
         }
-    } else if (isBotActive && !isBot) {
-        if (functions.isIgnored(senderNumber)) {
-            // Send the updated template message for ignored users
-            const templateMessage = functions.getTemplateMessage();
-            await client.sendMessage(senderId, templateMessage);
-        } else {
-            // Get the current subjects before processing the message
-            const currentSubjects = functions.getCurrentSubjects();
-            const response = await functions.storeUserMessage(client, assistant, senderNumber, message, currentSubjects);
-            if (response) {
-                await client.sendMessage(senderId, response);
-            }
+    } else if (isBotActive && !isBot && !functions.isIgnored(senderNumber)) {
+        // Only process messages for users in the ignore list (reverse logic)
+        const response = await functions.storeUserMessage(client, assistant, senderNumber, message);
+        if (response) {
+            await client.sendMessage(senderId, response);
         }
     } else if (isBot) {
         // No action needed for bot's own message
