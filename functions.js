@@ -1,7 +1,7 @@
 const POLLING_INTERVAL = 1000;
 const MAX_RETRIES = 60;
 const moderators = new Set(); // Add any default moderator numbers here
-let assistantKey = 'asst_ze2PHjbK3g1MwGuEW36LgVwF';
+let assistantKey = 'asst_7D9opuwqYdQJeRIdRMAaHoZG';
 const userThreads = {};
 const userMessages = {};
 const userMessageQueue = {};
@@ -18,6 +18,9 @@ const userProcessingTimers = {};
 // Add these constants at the top of the file
 const IGNORE_LIST_FILE = path.join(__dirname, 'ignore_list.json');
 const ignoreList = new Set();
+const SUBJECTS_FILE = path.join(__dirname, 'subjects.json');
+const subjects = {};
+const userSubjects = {};
 
 // Add these functions to handle saving and loading the ignore list
 
@@ -57,11 +60,6 @@ function removeFromIgnoreList(number) {
 // Add this function to check if a number is in the ignore list
 function isIgnored(number) {
     return ignoreList.has(number);
-}
-
-// Add this function to generate a random delay between 10 and 30 seconds
-function getRandomDelay() {
-    return Math.floor(Math.random() * (30000 - 10000 + 1) + 10000);
 }
 
 async function sendMessageWithValidation(client, number, message, senderNumber) {
@@ -107,7 +105,7 @@ function clearAllThreads() {
     }
 }
 
-async function generateResponseOpenAI(assistant, senderNumber, userMessage) {
+async function generateResponseOpenAI(assistant, senderNumber, userMessage, assistantKey) {
     try {
         if (!userMessage) {
             throw new Error('Empty message received.');
@@ -129,7 +127,6 @@ async function generateResponseOpenAI(assistant, senderNumber, userMessage) {
 
         const run = await assistant.beta.threads.runs.create(threadId, {
             assistant_id: assistantKey,
-            // Remove the tools parameter from here
         });
 
         await pollRunStatus(assistant, threadId, run.id);
@@ -138,37 +135,14 @@ async function generateResponseOpenAI(assistant, senderNumber, userMessage) {
         const latestMessage = messages.data[0];
 
         let response = '';
-        let shouldScheduleAppointment = false;
 
         if (latestMessage.content && latestMessage.content.length > 0) {
             for (const content of latestMessage.content) {
                 if (content.type === 'text') {
                     response += content.text.value.trim() + ' ';
-                } else if (content.type === 'tool_calls') {
-                    for (const toolCall of content.tool_calls) {
-                        if (toolCall.function.name === 'scheduleAppointment') {
-                            const args = JSON.parse(toolCall.function.arguments);
-                            if (args.schedule) {
-                                shouldScheduleAppointment = true;
-                            }
-                        }
-                    }
                 }
             }
         }
-
-        if (shouldScheduleAppointment) {
-            const appointmentResponse = await scheduleAppointment(senderNumber);
-            response += appointmentResponse + ' ';
-        }
-
-        // Check if the response is "interested" or "Interested"
-        if (["interested", "Interested"].includes(response.trim())) {
-            addToIgnoreList(senderNumber);
-            response = "Thank you for showing interest in scheduling a meeting. We will contact you shortly to confirm.";
-        }
-
-        // Log the generated response
 
         return response.trim() || "I'm sorry, I couldn't generate a response.";
     } catch (error) {
@@ -261,6 +235,12 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
         const [command, ...args] = messageText.split(' ');
         const lowerCommand = command.toLowerCase();
 
+        if (lowerCommand === '!!') {
+            // Reset the user's subject selection and send the template message
+            delete userSubjects[senderNumber];
+            return getTemplateMessage();
+        }
+
         if (lowerCommand.startsWith('!!')) {
             if (lowerCommand === '!!show-menu') {
                 return showMenu(isAdmin, isModerator);
@@ -347,7 +327,7 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                             }
                             const recipientNumber = chat.id.user;
                             removeFromIgnoreList(recipientNumber);
-                            return `AI assistance enabled for ${recipientNumber}.`;
+                            return getTemplateMessage(); // Send the template message after enabling AI assistance
                         } else {
                             return "You don't have permission to use this command.";
                         }
@@ -426,13 +406,14 @@ function showMenu(isAdmin, isModerator) {
 }
 
 async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message) {
-    // Check if the sender is the bot itself or in the ignore list
-    if (senderNumber === client.info.wid.user || isIgnored(senderNumber)) {
+    // Check if the sender is the bot itself
+    if (senderNumber === client.info.wid.user) {
         return null;
     }
 
-    if (!userMessageQueues[senderNumber]) {
-        userMessageQueues[senderNumber] = [];
+    // Check if the user is in the ignore list
+    if (isIgnored(senderNumber)) {
+        return null;
     }
 
     let messageToStore = '';
@@ -448,54 +429,53 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
             console.error(`Error processing voice message: ${error.message}`);
             messageToStore = "Sorry, I couldn't process your voice message.";
         }
-    } else if (message.type === 'document') {
-        const mimeType = message.mimetype;
-        let documentType;
-        if (mimeType === 'application/pdf') {
-            documentType = 'PDF';
-        } else if (mimeType && mimeType.includes('word')) {
-            documentType = 'Word document';
-        } else {
-            documentType = `document of type ${mimeType}`;
-        }
-
-        const response = await handleDocument(documentType, senderNumber);
-        await client.sendMessage(`${senderNumber}@c.us`, response);
-        return null;
-    } else if (message.type === 'image') {
-        // Ignore pictures
+    } else if (message.type === 'document' || message.type === 'image') {
+        // Ignore documents and images
         console.log(`Ignored ${message.type} message from ${senderNumber}`);
-        return null; // No immediate response
+        return null;
     } else {
         // For text messages and other types
         messageToStore = message.body || `A message of type ${message.type} was received`;
     }
 
-    userMessageQueues[senderNumber].push(messageToStore);
-
-    // If there's no processing timer for this user, set one
-    if (!userProcessingTimers[senderNumber]) {
-        const delay = getRandomDelay();
-        userProcessingTimers[senderNumber] = setTimeout(() => {
-            processUserMessages(client, assistantOrOpenAI, senderNumber);
-        }, delay);
+    // Check if the message is a subject selection
+    if (!userSubjects[senderNumber]) {
+        const subjectNumber = parseInt(messageToStore.trim());
+        const subjectKeys = Object.keys(subjects);
+        if (!isNaN(subjectNumber) && subjectNumber > 0 && subjectNumber <= subjectKeys.length) {
+            const selectedSubject = subjectKeys[subjectNumber - 1];
+            userSubjects[senderNumber] = subjects[selectedSubject];
+            return `You've selected ${selectedSubject}. You can now start chatting with the AI assistant for this subject.`;
+        } else if (messageToStore.trim() === '!!') {
+            return getTemplateMessage();
+        } else {
+            return 'Please select a valid subject number from the list. To see the list again, type "!!".';
+        }
     }
 
-    // Log the message to be stored
+    // Process the message with the selected subject's assistant
+    // Only if it's not a subject selection message
+    if (!messageToStore.trim().match(/^\d+$/)) {
+        const response = await processUserMessages(client, assistantOrOpenAI, senderNumber, messageToStore);
+        if (response) {
+            await client.sendMessage(`${senderNumber}@c.us`, response);
+        }
+        return null; // Return null to prevent sending the response twice
+    }
 
-    return null; // No immediate response
+    return null; // Return null for subject selection messages to avoid double responses
 }
 
-async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
+async function processUserMessages(client, assistantOrOpenAI, senderNumber, message) {
     // Ignore messages from "status"
-    if (senderNumber === 'status' || !senderNumber || userMessageQueues[senderNumber].length === 0) return;
+    if (senderNumber === 'status' || !senderNumber) return null;
 
-    const combinedMessage = userMessageQueues[senderNumber].join('\n');
-    const isVoiceMessage = combinedMessage.startsWith('Transcribed voice message:');
-    userMessageQueues[senderNumber] = []; // Clear the queue
+    const isVoiceMessage = message.startsWith('Transcribed voice message:');
 
     try {
-        const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, combinedMessage);
+        // Use the user's selected subject's assistant key
+        const subjectAssistantKey = userSubjects[senderNumber] || assistantKey;
+        const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, message, subjectAssistantKey);
 
         // Validate senderNumber format
         const formattedSenderNumber = `${senderNumber}@c.us`;
@@ -504,7 +484,8 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
         }
 
         // Send text response for all message types
-        await client.sendMessage(formattedSenderNumber, response);
+        // Remove this line to prevent sending the message twice
+        // await client.sendMessage(formattedSenderNumber, response);
 
         // Generate and send audio response only for voice messages
         if (isVoiceMessage) {
@@ -513,25 +494,16 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber) {
             await client.sendMessage(formattedSenderNumber, media, { sendAudioAsVoice: true });
         }
 
+        return response;
+
     } catch (error) {
         if (error.message.includes('invalid wid')) {
             console.warn(`Invalid WID error for ${senderNumber}: ${error.message}`);
-            // Optionally, you can add logic to handle this specific error, such as notifying an admin
         } else {
             console.error(`Error processing messages for ${senderNumber}: ${error.message}`);
             const errorResponse = "Sorry, an error occurred while processing your messages.";
             await client.sendMessage(`${senderNumber}@c.us`, errorResponse);
-        }
-    } finally {
-        // Clear the processing timer
-        delete userProcessingTimers[senderNumber];
-
-        // If there are more messages in the queue, set a new timer
-        if (userMessageQueues[senderNumber].length > 0) {
-            const delay = getRandomDelay();
-            userProcessingTimers[senderNumber] = setTimeout(() => {
-                processUserMessages(client, assistantOrOpenAI, senderNumber);
-            }, delay);
+            return errorResponse;
         }
     }
 }
@@ -565,7 +537,7 @@ async function generateAudioResponse(assistantOrOpenAI, text) {
 // Add these new functions
 async function handleDocument(documentType, senderNumber) {
     console.log(`Handling document of type ${documentType} from ${senderNumber}`);
-    addToIgnoreList(senderNumber);
+    // Removed: addToIgnoreList(senderNumber);
     return `Thank you for sending the Document. Our team will review it and get back to you soon.`;
 }
 
@@ -573,6 +545,42 @@ async function scheduleAppointment(senderNumber) {
     console.log(`Scheduling appointment for ${senderNumber}`);
     addToIgnoreList(senderNumber);
     return "Thank you for your interest in scheduling an appointment. Our team will contact you shortly at this number to arrange a suitable time. If you have any specific preferences or requirements, please let us know when we reach out to you.";
+}
+
+// Add this function to reload subjects
+function reloadSubjects() {
+    try {
+        const data = fs.readFileSync(SUBJECTS_FILE, 'utf8');
+        const loadedSubjects = JSON.parse(data);
+        // Clear the existing subjects before assigning new ones
+        Object.keys(subjects).forEach(key => delete subjects[key]);
+        Object.assign(subjects, loadedSubjects);
+        console.log('Subjects reloaded:', subjects);
+    } catch (error) {
+        console.error('Error reloading subjects:', error);
+    }
+}
+
+// Modify the loadSubjects function
+function loadSubjects() {
+    reloadSubjects();
+    // Set up more frequent reloading (every 5 seconds)
+    setInterval(reloadSubjects, 5000);
+}
+
+// Add this function to get the current subjects
+function getCurrentSubjects() {
+    return { ...subjects };
+}
+
+// Modify the getTemplateMessage function
+function getTemplateMessage() {
+    let message = "Welcome! Please select a subject by replying with its number:\n\n";
+    Object.keys(subjects).forEach((subject, index) => {
+        message += `${index + 1}. ${subject}\n`;
+    });
+    message += "\nTo change the subject later, simply type '!!' at any time.";
+    return message;
 }
 
 module.exports = {
@@ -596,4 +604,9 @@ module.exports = {
     removeFromIgnoreList,
     handleDocument,
     scheduleAppointment,
+    loadSubjects,
+    getTemplateMessage,
+    reloadSubjects,
+    getCurrentSubjects,
+    SUBJECTS_FILE,
 };

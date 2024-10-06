@@ -3,6 +3,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const OpenAI = require('openai');
 const functions = require('./functions');
+const fs = require('fs');
+const path = require('path');
 
 const assistant = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -62,9 +64,14 @@ client.on('ready', () => {
 
     // Load the ignore list
     functions.loadIgnoreList();
-
+    
+    // Load subjects and set up periodic reloading
+    functions.loadSubjects();
+    
     // Start the periodic check for new messages
     setInterval(checkForNewMessages, 1000);
+    // Add this line to periodically check for subject changes
+    setInterval(checkForSubjectChanges, 5000);
 });
 
 async function checkForNewMessages() {
@@ -114,16 +121,14 @@ async function processMessage(message) {
             await client.sendMessage(senderId, response);
         }
     } else if (isBotActive && !isBot) {
-        // Check if the sender is in the ignore list
         if (functions.isIgnored(senderNumber)) {
-            // Do nothing if the user is in the ignore list
+            // Send the updated template message for ignored users
+            const templateMessage = functions.getTemplateMessage();
+            await client.sendMessage(senderId, templateMessage);
         } else {
-            // Store the message for processing with a delay
-            const response = await functions.storeUserMessage(client, assistant, senderNumber, message);
-
-            // Log the response from OpenAI
-
-            // Directly send the response if it exists
+            // Get the current subjects before processing the message
+            const currentSubjects = functions.getCurrentSubjects();
+            const response = await functions.storeUserMessage(client, assistant, senderNumber, message, currentSubjects);
             if (response) {
                 await client.sendMessage(senderId, response);
             }
@@ -131,6 +136,21 @@ async function processMessage(message) {
     } else if (isBot) {
         // No action needed for bot's own message
     }
+}
+
+// Modify the checkForSubjectChanges function:
+function checkForSubjectChanges() {
+    const currentSubjects = functions.getCurrentSubjects();
+    const subjectsJson = JSON.stringify(currentSubjects);
+    
+    // Use the SUBJECTS_FILE from functions
+    fs.writeFile(functions.SUBJECTS_FILE, subjectsJson, (err) => {
+        if (err) {
+            console.error('Error writing subjects file:', err);
+        } else {
+            console.log('Subjects file updated');
+        }
+    });
 }
 
 client.on('message_create', async (message) => {
