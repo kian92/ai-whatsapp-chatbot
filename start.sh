@@ -9,10 +9,10 @@ export FLASK_ENV=production
 export FLASK_APP=dashboard.py
 
 # Start the Flask application with Gunicorn
-gunicorn --bind 0.0.0.0:8080 dashboard:app &
+gunicorn --bind 0.0.0.0:8080 dashboard:app --pid gunicorn.pid &
 
 # Start the Node.js bot
-node index.js &
+node index.js & echo $! > node.pid
 
 # Note: We're not starting the tunnel in production
 

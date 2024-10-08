@@ -65,13 +65,14 @@ client.on('ready', () => {
     // Load the ignore list
     functions.loadIgnoreList();
     
-    // Load subjects and set up periodic reloading
+    // Load subjects initially
     functions.loadSubjects();
     
     // Start the periodic check for new messages
     setInterval(checkForNewMessages, 1000);
-    // Add this line to periodically check for subject changes
-    setInterval(checkForSubjectChanges, 5000);
+
+    // Check for subject changes every 24 hours
+    setInterval(checkForSubjectChanges, 24 * 60 * 60 * 1000);
 });
 
 async function checkForNewMessages() {
@@ -99,6 +100,12 @@ async function checkForNewMessages() {
 }
 
 async function processMessage(message) {
+    // Ignore e2e_notification messages
+    if (message.type === 'e2e_notification') {
+        console.log('Ignoring e2e_notification message');
+        return;
+    }
+
     // Check if the message has already been processed
     if (processedMessageIds.has(message.id._serialized)) {
         return;
@@ -133,6 +140,7 @@ async function processMessage(message) {
 
 // Modify the checkForSubjectChanges function:
 function checkForSubjectChanges() {
+    console.log('Checking for subject changes (24-hour interval)');
     const currentSubjects = functions.getCurrentSubjects();
     const subjectsJson = JSON.stringify(currentSubjects);
     
@@ -144,6 +152,9 @@ function checkForSubjectChanges() {
             console.log('Subjects file updated');
         }
     });
+
+    // Reload subjects after writing the file
+    functions.reloadSubjects();
 }
 
 client.on('message_create', async (message) => {

@@ -574,8 +574,7 @@ function reloadSubjects() {
 // Modify the loadSubjects function
 function loadSubjects() {
     reloadSubjects();
-    // Set up more frequent reloading (every 5 seconds)
-    setInterval(reloadSubjects, 5000);
+    // Remove the setInterval call here
 }
 
 // Add this function to get the current subjects
