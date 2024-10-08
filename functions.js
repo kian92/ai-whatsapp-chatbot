@@ -463,11 +463,12 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
 
     // Check if the message is a subject selection
     if (!userSubjects[senderNumber]) {
+        const currentSubjects = getCurrentSubjects();
         const subjectNumber = parseInt(messageToStore.trim());
-        const subjectKeys = Object.keys(subjects);
+        const subjectKeys = Object.keys(currentSubjects);
         if (!isNaN(subjectNumber) && subjectNumber > 0 && subjectNumber <= subjectKeys.length) {
             const selectedSubject = subjectKeys[subjectNumber - 1];
-            userSubjects[senderNumber] = subjects[selectedSubject];
+            userSubjects[senderNumber] = currentSubjects[selectedSubject];
             return `You've selected ${selectedSubject}. You can now start chatting with the AI assistant for this subject.`;
         } else {
             return 'Please select a valid subject number from the list. To see the list again, type "!!".';
@@ -557,7 +558,10 @@ async function generateAudioResponse(assistantOrOpenAI, text) {
 
 // These functions have been removed as they are no longer necessary
 
-// Add this function to reload subjects
+// Add this variable at the top of your file
+let lastSubjectsReloadTime = 0;
+
+// Modify the reloadSubjects function
 function reloadSubjects() {
     try {
         const data = fs.readFileSync(SUBJECTS_FILE, 'utf8');
@@ -571,22 +575,17 @@ function reloadSubjects() {
     }
 }
 
-// Modify the loadSubjects function
-function loadSubjects() {
-    reloadSubjects();
-    // Remove the setInterval call here
-}
-
-// Add this function to get the current subjects
+// Modify the getCurrentSubjects function
 function getCurrentSubjects() {
+    reloadSubjects(); // Force reload every time subjects are accessed
     return { ...subjects };
 }
 
 // Modify the getTemplateMessage function
 function getTemplateMessage(senderNumber) {
-    // Users in the ignore list are allowed to use the bot, so we don't need to check here
+    const currentSubjects = getCurrentSubjects();
     let message = "Welcome! Please select a subject by replying with its number:\n\n";
-    Object.keys(subjects).forEach((subject, index) => {
+    Object.keys(currentSubjects).forEach((subject, index) => {
         message += `${index + 1}. ${subject}\n`;
     });
     message += "\nTo change the subject later, simply type '!!' at any time.";
@@ -612,8 +611,6 @@ module.exports = {
     isIgnored,
     addToIgnoreList,
     removeFromIgnoreList,
-    loadSubjects,
-    getTemplateMessage,
     reloadSubjects,
     getCurrentSubjects,
     SUBJECTS_FILE,

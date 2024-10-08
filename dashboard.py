@@ -3,6 +3,8 @@ from functools import wraps
 import json
 import os
 import logging
+import subprocess
+import signal
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'  # Replace with a strong secret key
@@ -73,6 +75,31 @@ def remove_subject(category):
         save_subjects(subjects)
         app.logger.info(f"Removed subject: {category}")
     return redirect(url_for('index'))
+
+# Global variable to store the bot process
+bot_process = None
+
+@app.route('/start_bot')
+@login_required
+def start_bot():
+    global bot_process
+    if bot_process is None or bot_process.poll() is not None:
+        bot_process = subprocess.Popen(['node', 'index.js'])
+        return 'Bot started successfully'
+    else:
+        return 'Bot is already running'
+
+@app.route('/stop_bot')
+@login_required
+def stop_bot():
+    global bot_process
+    if bot_process is not None and bot_process.poll() is None:
+        os.kill(bot_process.pid, signal.SIGTERM)
+        bot_process.wait()
+        bot_process = None
+        return 'Bot stopped successfully'
+    else:
+        return 'Bot is not running'
 
 if __name__ == '__main__':
     app.logger.info("Starting the Flask application...")

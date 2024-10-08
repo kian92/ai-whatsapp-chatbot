@@ -1,6 +1,6 @@
 @echo off
 call npm install
 call pip install -r requirements.txt
-start cmd /k python dashboard.py
-start cmd /k node index.js
-start cmd /k npm run tunnel
+set FLASK_ENV=production
+set FLASK_APP=dashboard.py
+python -m flask run --host=0.0.0.0 --port=8080

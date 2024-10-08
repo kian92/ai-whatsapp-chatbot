@@ -10,75 +10,72 @@ const assistant = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-let client;
+const client = new Client({
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        headless: true,
+        args: ['--no-sandbox'],
+    }
+});
+
 const adminNumber = ['923499490427'];
-console.log(adminNumber);
-let isBotActive = true;
+console.log(adminNumber); // Example usage
+let isBotActive = true; // Control the bot's active state
+
+// Add these variables to store the last messages
+let lastBotMessage = '';
+let lastHumanMessage = '';
+
+// Get the bot's own number after client is ready
 let botNumber = '';
+
+// Add this variable to store the timestamp of the last processed message
 let lastProcessedMessageTime = 0;
+
+// Add this Set to keep track of processed message IDs
 const processedMessageIds = new Set();
 
-function initializeClient() {
-    client = new Client({
-        authStrategy: new LocalAuth(),
-        puppeteer: {
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        }
-    });
-
-    client.on('qr', (qr) => {
-        qrcode.generate(qr, { small: true });
-        console.log('Scan the QR code above to log in to WhatsApp');
-    });
-
-    client.on('ready', () => {
-        console.log('Client is ready!');
-        botNumber = client.info.wid.user;
-        console.log(`Bot number: ${botNumber}`);
-
-        if (!adminNumber.includes(botNumber)) {
-            adminNumber.push(botNumber);
-            console.log(`Bot number ${botNumber} added to admin list.`);
-        }
-
-        functions.loadIgnoreList();
-        functions.loadSubjects();
-        
-        setInterval(checkForNewMessages, 1000);
-        setInterval(checkForSubjectChanges, 24 * 60 * 60 * 1000);
-    });
-
-    client.on('disconnected', (reason) => {
-        console.log('Client was disconnected', reason);
-        setTimeout(initializeClient, 5000);
-    });
-
-    client.on('message_create', async (message) => {
-        await processMessage(message);
-    });
-
-    client.on('error', (error) => {
-        console.error('An error occurred:', error);
-        if (error.message.includes('Session closed')) {
-            console.log('Attempting to reconnect...');
-            setTimeout(initializeClient, 5000);
-        }
-    });
-
-    client.initialize().catch((error) => {
-        console.error('Failed to initialize client:', error);
-        setTimeout(initializeClient, 5000);
-    });
+function stopBot() {
+    isBotActive = false;
+    console.log('Bot has been paused.');
 }
+
+function startBot() {
+    isBotActive = true;
+    console.log('Bot is now active.');
+}
+
+client.on('qr', (qr) => {
+    // Generate and display QR code in the terminal
+    qrcode.generate(qr, { small: true });
+    console.log('Scan the QR code above to log in to WhatsApp');
+});
+
+client.on('ready', () => {
+    console.log('Client is ready!');
+    botNumber = client.info.wid.user; // Get the bot's own number
+    console.log(`Bot number: ${botNumber}`);
+
+    // Add the bot number to the list of admin numbers
+    if (!adminNumber.includes(botNumber)) {
+        adminNumber.push(botNumber);
+        console.log(`Bot number ${botNumber} added to admin list.`);
+    }
+
+    // Load the ignore list
+    functions.loadIgnoreList();
+    
+    // Load subjects and set up periodic reloading
+    functions.loadSubjects();
+    
+    // Start the periodic check for new messages
+    setInterval(checkForNewMessages, 1000);
+    // Add this line to periodically check for subject changes
+    setInterval(checkForSubjectChanges, 5000);
+});
 
 async function checkForNewMessages() {
     try {
-        if (!client.pupPage) {
-            console.log('Client page not available, skipping message check');
-            return;
-        }
-
         const chat = await client.getChatById(`${botNumber}@c.us`);
         const messages = await chat.fetchMessages({ limit: 1 });
 
@@ -98,10 +95,6 @@ async function checkForNewMessages() {
         }
     } catch (error) {
         console.error('Error checking for new messages:', error);
-        if (error.message.includes('Session closed')) {
-            console.log('Session closed, attempting to reconnect...');
-            setTimeout(initializeClient, 5000);
-        }
     }
 }
 
@@ -146,7 +139,6 @@ async function processMessage(message) {
 
 // Modify the checkForSubjectChanges function:
 function checkForSubjectChanges() {
-    console.log('Checking for subject changes (24-hour interval)');
     const currentSubjects = functions.getCurrentSubjects();
     const subjectsJson = JSON.stringify(currentSubjects);
     
@@ -158,9 +150,6 @@ function checkForSubjectChanges() {
             console.log('Subjects file updated');
         }
     });
-
-    // Reload subjects after writing the file
-    functions.reloadSubjects();
 }
 
 client.on('message_create', async (message) => {
@@ -169,10 +158,6 @@ client.on('message_create', async (message) => {
 
 client.on('error', (error) => {
     console.error('An error occurred:', error);
-    if (error.message.includes('Session closed')) {
-        console.log('Attempting to reconnect...');
-        setTimeout(initializeClient, 5000);
-    }
 });
 
-initializeClient();
+client.initialize();
