@@ -4,8 +4,7 @@
   "description": "WhatsApp Chatbot using OpenAI API",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js"
+    "start": "node -e \"require('child_process').exec(process.platform === 'win32' ? 'start.bat' : './start.sh')\""
   },
   "keywords": [],
   "author": "",
