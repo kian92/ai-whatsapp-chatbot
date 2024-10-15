@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const qrcode = require('qrcode');
 const OpenAI = require('openai');
 const functions = require('./functions');
 const fs = require('fs');
@@ -46,32 +46,49 @@ function startBot() {
 }
 
 client.on('qr', (qr) => {
-    // Generate and display QR code in the terminal
-    qrcode.generate(qr, { small: true });
-    console.log('Scan the QR code above to log in to WhatsApp');
+    console.log('QR Code received, generating image...');
+    qrcode.toFile('qr_code.png', qr, {
+        color: {
+            dark: '#000000',
+            light: '#ffffff'
+        }
+    }, (err) => {
+        if (err) {
+            console.error('Error generating QR code:', err);
+        } else {
+            console.log('QR code image generated successfully');
+        }
+    });
 });
 
 client.on('ready', () => {
     console.log('Client is ready!');
-    botNumber = client.info.wid.user; // Get the bot's own number
+    botNumber = client.info.wid.user;
     console.log(`Bot number: ${botNumber}`);
 
-    // Add the bot number to the list of admin numbers
     if (!adminNumber.includes(botNumber)) {
         adminNumber.push(botNumber);
         console.log(`Bot number ${botNumber} added to admin list.`);
     }
 
-    // Load the ignore list
     functions.loadIgnoreList();
-    
-    // Load subjects and set up periodic reloading
     functions.loadSubjects();
     
-    // Start the periodic check for new messages
     setInterval(checkForNewMessages, 1000);
-    // Add this line to periodically check for subject changes
     setInterval(checkForSubjectChanges, 5000);
+
+    // Notify the server that the bot is connected
+    fetch('http://localhost:8080/set_bot_connected', { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log(data.message);
+    })
+    .catch(error => console.error('Error updating bot status:', error));
 });
 
 async function checkForNewMessages() {

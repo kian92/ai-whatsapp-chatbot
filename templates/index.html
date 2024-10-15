@@ -73,6 +73,31 @@
         .logout a {
             color: #128c7e;
         }
+        .bot-controls {
+            margin-top: 2rem;
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+        .bot-controls button {
+            background-color: #128c7e;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .bot-controls button:hover {
+            background-color: #075e54;
+        }
+        #qrCode {
+            text-align: center;
+            margin-top: 2rem;
+        }
+        #qrCode img {
+            max-width: 100%;
+            height: auto;
+        }
     </style>
 </head>
 <body>
@@ -98,20 +123,86 @@
         <div class="bot-controls">
             <button onclick="startBot()">Start Bot</button>
             <button onclick="stopBot()">Stop Bot</button>
+            <button onclick="resetBot()">Reset Bot</button>
         </div>
+        <div id="qrCode"></div>
     </div>
     <script>
+    let botConnected = false;
+
     function startBot() {
         fetch('/start_bot')
-            .then(response => response.text())
-            .then(data => alert(data));
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                botConnected = data.connected;
+                if (!botConnected) {
+                    checkQRCode();
+                }
+            });
     }
 
     function stopBot() {
         fetch('/stop_bot')
-            .then(response => response.text())
-            .then(data => alert(data));
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                botConnected = data.connected;
+                document.getElementById('qrCode').innerHTML = 'Bot stopped';
+            });
     }
+
+    function resetBot() {
+        fetch('/reset_bot')
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                botConnected = data.connected;
+                checkQRCode();
+            });
+    }
+
+    function checkQRCode() {
+        fetch('/qr_code_exists')
+            .then(response => response.json())
+            .then(data => {
+                if (data.exists) {
+                    getQRCode();
+                } else {
+                    checkBotStatus();
+                }
+            });
+    }
+
+    function getQRCode() {
+        const qrCodeElement = document.getElementById('qrCode');
+        const img = new Image();
+        img.src = '/get_qr_code?' + new Date().getTime();
+        img.onload = function() {
+            qrCodeElement.innerHTML = '';
+            qrCodeElement.appendChild(img);
+        };
+        img.onerror = function() {
+            console.log('QR code not available');
+            qrCodeElement.innerHTML = 'QR code not available';
+        };
+    }
+
+    function checkBotStatus() {
+        fetch('/is_bot_ready')
+            .then(response => response.json())
+            .then(data => {
+                if (data.ready && !botConnected) {
+                    botConnected = true;
+                    document.getElementById('qrCode').innerHTML = 'Bot connected successfully';
+                } else if (!data.ready) {
+                    setTimeout(checkQRCode, 5000); // Check again after 5 seconds if not ready
+                }
+            });
+    }
+
+    // Initial check on page load
+    checkBotStatus();
     </script>
 </body>
 </html>
