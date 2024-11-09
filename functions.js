@@ -18,10 +18,6 @@ const userProcessingTimers = {};
 // Add these constants at the top of the file
 const IGNORE_LIST_FILE = path.join(__dirname, 'ignore_list.json');
 const ignoreList = new Set();
-const SUBJECTS_FILE = path.join(__dirname, 'subjects.json');
-const subjects = {};
-const userSubjects = {};
-const userNotifiedAboutAccess = new Set();
 
 // Add these functions to handle saving and loading the ignore list
 
@@ -72,7 +68,7 @@ function removeFromIgnoreList(number) {
 
 // Modify the isIgnored function
 function isIgnored(number) {
-    return !ignoreList.has(number);
+    return ignoreList.has(number);
 }
 
 async function sendMessageWithValidation(client, number, message, senderNumber) {
@@ -248,12 +244,6 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
         const [command, ...args] = messageText.split(' ');
         const lowerCommand = command.toLowerCase();
 
-        if (lowerCommand === '!!') {
-            // Reset the user's subject selection and send the template message
-            delete userSubjects[senderNumber];
-            return getTemplateMessage();
-        }
-
         if (lowerCommand.startsWith('!!')) {
             if (lowerCommand === '!!show-menu') {
                 return showMenu(isAdmin, isModerator);
@@ -424,13 +414,8 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
         return null;
     }
 
-    // Check if the user is in the ignore list (now meaning allowed to use the bot)
-    if (!ignoreList.has(senderNumber)) {
-        // Send a one-time message to users not in the ignore list
-        if (!userNotifiedAboutAccess.has(senderNumber)) {
-            await client.sendMessage(`${senderNumber}@c.us`, "Sorry, you don't have access to this bot. To request access, please contact an administrator.");
-            userNotifiedAboutAccess.add(senderNumber);
-        }
+    // Check if the user is in the ignore list (meaning they should be ignored)
+    if (isIgnored(senderNumber)) {
         return null;
     }
 
@@ -456,36 +441,12 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
         messageToStore = message.body || `A message of type ${message.type} was received`;
     }
 
-    // Check if the message is "!!" to show the template message
-    if (messageToStore.trim() === '!!') {
-        return getTemplateMessage(senderNumber);
+    // Process the message directly with OpenAI
+    const response = await processUserMessages(client, assistantOrOpenAI, senderNumber, messageToStore);
+    if (response) {
+        await client.sendMessage(`${senderNumber}@c.us`, response);
     }
-
-    // Check if the message is a subject selection
-    if (!userSubjects[senderNumber]) {
-        const currentSubjects = getCurrentSubjects();
-        const subjectNumber = parseInt(messageToStore.trim());
-        const subjectKeys = Object.keys(currentSubjects);
-        if (!isNaN(subjectNumber) && subjectNumber > 0 && subjectNumber <= subjectKeys.length) {
-            const selectedSubject = subjectKeys[subjectNumber - 1];
-            userSubjects[senderNumber] = currentSubjects[selectedSubject];
-            return `You've selected ${selectedSubject}. You can now start chatting with the AI assistant for this subject.`;
-        } else {
-            return 'Please select a valid subject number from the list. To see the list again, type "!!".';
-        }
-    }
-
-    // Process the message with the selected subject's assistant
-    // Only if it's not a subject selection message
-    if (!messageToStore.trim().match(/^\d+$/)) {
-        const response = await processUserMessages(client, assistantOrOpenAI, senderNumber, messageToStore);
-        if (response) {
-            await client.sendMessage(`${senderNumber}@c.us`, response);
-        }
-        return null; // Return null to prevent sending the response twice
-    }
-
-    return null; // Return null for subject selection messages to avoid double responses
+    return null;
 }
 
 async function processUserMessages(client, assistantOrOpenAI, senderNumber, message) {
@@ -495,19 +456,14 @@ async function processUserMessages(client, assistantOrOpenAI, senderNumber, mess
     const isVoiceMessage = message.startsWith('Transcribed voice message:');
 
     try {
-        // Use the user's selected subject's assistant key
-        const subjectAssistantKey = userSubjects[senderNumber] || assistantKey;
-        const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, message, subjectAssistantKey);
+        // Use the default assistantKey directly without subject logic
+        const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, message, assistantKey);
 
         // Validate senderNumber format
         const formattedSenderNumber = `${senderNumber}@c.us`;
         if (!formattedSenderNumber.match(/^\d+@c\.us$/)) {
             throw new Error(`Invalid sender number format: ${formattedSenderNumber}`);
         }
-
-        // Send text response for all message types
-        // Remove this line to prevent sending the message twice
-        // await client.sendMessage(formattedSenderNumber, response);
 
         // Generate and send audio response only for voice messages
         if (isVoiceMessage) {
@@ -556,42 +512,6 @@ async function generateAudioResponse(assistantOrOpenAI, text) {
     return buffer;
 }
 
-// These functions have been removed as they are no longer necessary
-
-// Add this variable at the top of your file
-let lastSubjectsReloadTime = 0;
-
-// Modify the reloadSubjects function
-function reloadSubjects() {
-    try {
-        const data = fs.readFileSync(SUBJECTS_FILE, 'utf8');
-        const loadedSubjects = JSON.parse(data);
-        // Clear the existing subjects before assigning new ones
-        Object.keys(subjects).forEach(key => delete subjects[key]);
-        Object.assign(subjects, loadedSubjects);
-        console.log('Subjects reloaded:', subjects);
-    } catch (error) {
-        console.error('Error reloading subjects:', error);
-    }
-}
-
-// Modify the getCurrentSubjects function
-function getCurrentSubjects() {
-    reloadSubjects(); // Force reload every time subjects are accessed
-    return { ...subjects };
-}
-
-// Modify the getTemplateMessage function
-function getTemplateMessage(senderNumber) {
-    const currentSubjects = getCurrentSubjects();
-    let message = "Welcome! Please select a subject by replying with its number:\n\n";
-    Object.keys(currentSubjects).forEach((subject, index) => {
-        message += `${index + 1}. ${subject}\n`;
-    });
-    message += "\nTo change the subject later, simply type '!!' at any time.";
-    return message;
-}
-
 module.exports = {
     showMenu,
     parseTimeString,
@@ -611,7 +531,4 @@ module.exports = {
     isIgnored,
     addToIgnoreList,
     removeFromIgnoreList,
-    reloadSubjects,
-    getCurrentSubjects,
-    SUBJECTS_FILE,
 };

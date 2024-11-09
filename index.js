@@ -72,10 +72,8 @@ client.on('ready', () => {
     }
 
     functions.loadIgnoreList();
-    functions.loadSubjects();
     
     setInterval(checkForNewMessages, 1000);
-    setInterval(checkForSubjectChanges, 5000);
 
     // Notify the server that the bot is connected
     fetch('http://localhost:8080/set_bot_connected', { 
@@ -116,23 +114,20 @@ async function checkForNewMessages() {
 }
 
 async function processMessage(message) {
-    // Ignore e2e_notification messages
     if (message.type === 'e2e_notification') {
         console.log('Ignoring e2e_notification message');
         return;
     }
 
-    // Check if the message has already been processed
     if (processedMessageIds.has(message.id._serialized)) {
         return;
     }
 
-    // Mark the message as processed
     processedMessageIds.add(message.id._serialized);
 
     const senderId = message.from;
     const senderNumber = senderId.split('@')[0];
-    const messageText = message.body || ''; // Add a default empty string if body is undefined
+    const messageText = message.body || '';
 
     const isAdmin = adminNumber.includes(senderNumber);
     const isModerator = functions.isModerator(senderNumber);
@@ -144,7 +139,6 @@ async function processMessage(message) {
             await client.sendMessage(senderId, response);
         }
     } else if (isBotActive && !isBot && !functions.isIgnored(senderNumber)) {
-        // Only process messages for users in the ignore list (reverse logic)
         const response = await functions.storeUserMessage(client, assistant, senderNumber, message);
         if (response) {
             await client.sendMessage(senderId, response);
@@ -152,21 +146,6 @@ async function processMessage(message) {
     } else if (isBot) {
         // No action needed for bot's own message
     }
-}
-
-// Modify the checkForSubjectChanges function:
-function checkForSubjectChanges() {
-    const currentSubjects = functions.getCurrentSubjects();
-    const subjectsJson = JSON.stringify(currentSubjects);
-    
-    // Use the SUBJECTS_FILE from functions
-    fs.writeFile(functions.SUBJECTS_FILE, subjectsJson, (err) => {
-        if (err) {
-            console.error('Error writing subjects file:', err);
-        } else {
-            console.log('Subjects file updated');
-        }
-    });
 }
 
 client.on('message_create', async (message) => {

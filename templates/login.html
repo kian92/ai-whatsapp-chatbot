@@ -1,70 +1,124 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - WhatsApp Bot Dashboard</title>
+    <title>WhatsApp Bot Login</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+        * {
             margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
         }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #00a884, #008069);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         .login-container {
-            background-color: white;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            width: 300px;
+            background: white;
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            animation: fadeIn 0.5s ease-out;
         }
-        h1 {
-            color: #075e54;
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-header {
             text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .login-header h1 {
+            color: #008069;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .form-group {
             margin-bottom: 1.5rem;
         }
-        form {
-            display: flex;
-            flex-direction: column;
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #333;
+            font-size: 0.9rem;
         }
-        input[type="text"], input[type="password"] {
-            padding: 0.5rem;
-            margin-bottom: 1rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        input[type="submit"] {
-            background-color: #128c7e;
-            color: white;
-            border: none;
-            padding: 0.75rem;
-            border-radius: 4px;
-            cursor: pointer;
+
+        .form-group input {
+            width: 100%;
+            padding: 0.8rem;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
             font-size: 1rem;
+            transition: border-color 0.3s ease;
         }
-        input[type="submit"]:hover {
-            background-color: #075e54;
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #00a884;
         }
-        .error {
-            color: #d63031;
+
+        .login-button {
+            width: 100%;
+            padding: 1rem;
+            background: #00a884;
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .login-button:hover {
+            background: #008069;
+        }
+
+        .error-message {
+            color: #dc3545;
+            font-size: 0.9rem;
+            margin-top: 1rem;
             text-align: center;
-            margin-bottom: 1rem;
         }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <h1>WhatsApp Bot Login</h1>
-        {% if error %}
-        <p class="error">{{ error }}</p>
-        {% endif %}
-        <form action="{{ url_for('login') }}" method="post">
-            <input type="text" name="username" placeholder="Username" required>
-            <input type="password" name="password" placeholder="Password" required>
-            <input type="submit" value="Login">
+        <div class="login-header">
+            <h1>WhatsApp Bot</h1>
+            <p>Login to access the dashboard</p>
+        </div>
+        <form method="POST">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit" class="login-button">Login</button>
+            {% if error %}
+            <div class="error-message">{{ error }}</div>
+            {% endif %}
         </form>
     </div>
 </body>
