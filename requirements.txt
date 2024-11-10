@@ -2,4 +2,4 @@ flask
 python-dotenv
 Flask-Session==0.5.0
 gunicorn==20.1.0
-# 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
+# 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

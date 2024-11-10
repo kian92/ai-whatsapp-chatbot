@@ -35,6 +35,13 @@ let lastProcessedMessageTime = 0;
 // Add this Set to keep track of processed message IDs
 const processedMessageIds = new Set();
 
+// Add near the start of the file, after the requires
+const picsFolder = path.join(__dirname, 'pics');
+if (!fs.existsSync(picsFolder)) {
+    console.log('Creating pics folder...');
+    fs.mkdirSync(picsFolder);
+}
+
 function stopBot() {
     isBotActive = false;
     console.log('Bot has been paused.');
@@ -61,7 +68,8 @@ client.on('qr', (qr) => {
     });
 });
 
-client.on('ready', () => {
+// Call this during initialization
+client.on('ready', async () => {
     console.log('Client is ready!');
     botNumber = client.info.wid.user;
     console.log(`Bot number: ${botNumber}`);

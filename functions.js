@@ -1,7 +1,7 @@
 const POLLING_INTERVAL = 1000;
 const MAX_RETRIES = 60;
 const moderators = new Set(); // Add any default moderator numbers here
-let assistantKey = 'asst_MndNelmWV53a1tDPXSpM8Env';
+let assistantKey = 'asst_OeiZPKfQ5FNrcbfaZqHIEcgt';
 const userThreads = {};
 const userMessages = {};
 const userMessageQueue = {};
@@ -11,6 +11,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { MessageMedia } = require('whatsapp-web.js');
 const path = require('path');
+const OpenAI = require('openai');
 
 const userMessageQueues = {};
 const userProcessingTimers = {};
@@ -114,59 +115,13 @@ function clearAllThreads() {
     }
 }
 
-async function generateResponseOpenAI(assistant, senderNumber, userMessage, assistantKey) {
-    try {
-        if (!userMessage) {
-            throw new Error('Empty message received.');
-        }
-
-        let threadId;
-        if (userThreads[senderNumber]) {
-            threadId = userThreads[senderNumber];
-        } else {
-            const chat = await assistant.beta.threads.create();
-            threadId = chat.id;
-            userThreads[senderNumber] = threadId;
-        }
-
-        await assistant.beta.threads.messages.create(threadId, {
-            role: 'user',
-            content: userMessage
-        });
-
-        const run = await assistant.beta.threads.runs.create(threadId, {
-            assistant_id: assistantKey,
-        });
-
-        await pollRunStatus(assistant, threadId, run.id);
-
-        const messages = await assistant.beta.threads.messages.list(threadId);
-        const latestMessage = messages.data[0];
-
-        let response = '';
-
-        if (latestMessage.content && latestMessage.content.length > 0) {
-            for (const content of latestMessage.content) {
-                if (content.type === 'text') {
-                    response += content.text.value.trim() + ' ';
-                }
-            }
-        }
-
-        return response.trim() || "I'm sorry, I couldn't generate a response.";
-    } catch (error) {
-        console.error(`Error in generateResponseOpenAI: ${error.message}`);
-        return "Sorry, something went wrong while processing your request.";
-    }
-}
-
 async function pollRunStatus(client, threadId, runId) {
     let retries = 0;
     while (retries < MAX_RETRIES) {
         try {
             const run = await client.beta.threads.runs.retrieve(threadId, runId);
-            if (run.status === "completed") {
-                return;
+            if (run.status === "completed" || run.status === "requires_action") {
+                return run;
             } else if (run.status === "failed" || run.status === "cancelled") {
                 throw new Error(`Run ${runId} ${run.status}`);
             }
@@ -174,7 +129,7 @@ async function pollRunStatus(client, threadId, runId) {
             retries++;
         } catch (error) {
             console.error(`Error polling run status: ${error.message}`);
-            throw new Error(`Error polling run status: ${error.message}`);
+            throw error;
         }
     }
     throw new Error(`Run ${runId} timed out after ${MAX_RETRIES} attempts`);
@@ -450,39 +405,54 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
 }
 
 async function processUserMessages(client, assistantOrOpenAI, senderNumber, message) {
-    // Ignore messages from "status"
     if (senderNumber === 'status' || !senderNumber) return null;
 
     const isVoiceMessage = message.startsWith('Transcribed voice message:');
+    console.log(`[Process] Processing message from ${senderNumber}: ${message}`);
 
     try {
-        // Use the default assistantKey directly without subject logic
+        // Generate OpenAI response
         const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, message, assistantKey);
+        console.log(`[Process] Got response for ${senderNumber}`);
 
-        // Validate senderNumber format
+        // Format sender number
         const formattedSenderNumber = `${senderNumber}@c.us`;
         if (!formattedSenderNumber.match(/^\d+@c\.us$/)) {
             throw new Error(`Invalid sender number format: ${formattedSenderNumber}`);
         }
 
-        // Generate and send audio response only for voice messages
+        // First send the text response
+        if (response.text) {
+            console.log(`[Process] Sending text response to ${senderNumber}`);
+            await client.sendMessage(formattedSenderNumber, response.text);
+        }
+
+        // Then send any images
+        if (response.images && response.images.length > 0) {
+            console.log(`[Process] Sending ${response.images.length} images to ${senderNumber}`);
+            for (const imageData of response.images) {
+                const media = new MessageMedia(
+                    imageData.mimeType,
+                    imageData.data,
+                    imageData.filename
+                );
+                await client.sendMessage(formattedSenderNumber, media);
+            }
+        }
+
+        // Handle voice messages
         if (isVoiceMessage) {
-            const audioBuffer = await generateAudioResponse(assistantOrOpenAI, response);
+            console.log(`[Process] Processing voice message for ${senderNumber}`);
+            const audioBuffer = await generateAudioResponse(assistantOrOpenAI, response.text);
             const media = new MessageMedia('audio/ogg', audioBuffer.toString('base64'), 'response.ogg');
             await client.sendMessage(formattedSenderNumber, media, { sendAudioAsVoice: true });
         }
 
-        return response;
+        return null; // Return null since we've already sent the messages
 
     } catch (error) {
-        if (error.message.includes('invalid wid')) {
-            console.warn(`Invalid WID error for ${senderNumber}: ${error.message}`);
-        } else {
-            console.error(`Error processing messages for ${senderNumber}: ${error.message}`);
-            const errorResponse = "Sorry, an error occurred while processing your messages.";
-            await client.sendMessage(`${senderNumber}@c.us`, errorResponse);
-            return errorResponse;
-        }
+        console.error(`[Process] Error processing messages for ${senderNumber}:`, error);
+        return "Sorry, an error occurred while processing your messages.";
     }
 }
 
@@ -512,6 +482,259 @@ async function generateAudioResponse(assistantOrOpenAI, text) {
     return buffer;
 }
 
+async function getRelevantImage(query) {
+    const picsFolder = path.join(__dirname, 'pics');
+
+    try {
+        if (!fs.existsSync(picsFolder)) {
+            return null;
+        }
+
+        const images = fs.readdirSync(picsFolder)
+            .filter(file => /\.(jpg|jpeg|png|gif)$/i.test(file));
+
+        if (images.length === 0) {
+            return null;
+        }
+
+        // Simple string similarity function
+        const similarity = (str1, str2) => {
+            str1 = str1.toLowerCase();
+            str2 = str2.toLowerCase();
+            const len1 = str1.length;
+            const len2 = str2.length;
+            const matrix = Array(len1 + 1).fill().map(() => Array(len2 + 1).fill(0));
+
+            for (let i = 0; i <= len1; i++) matrix[i][0] = i;
+            for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+
+            for (let i = 1; i <= len1; i++) {
+                for (let j = 1; j <= len2; j++) {
+                    const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j - 1] + cost
+                    );
+                }
+            }
+            return 1 - (matrix[len1][len2] / Math.max(len1, len2));
+        };
+
+        const imageScores = images.map(img => ({
+            image: img,
+            score: similarity(query, path.parse(img).name)
+        }));
+
+        const bestMatch = imageScores.reduce((prev, current) =>
+            (prev.score > current.score) ? prev : current
+        );
+
+        if (bestMatch.score > 0.3) {
+            const imagePath = path.join(picsFolder, bestMatch.image);
+            const imageData = fs.readFileSync(imagePath);
+            const mimeType = `image/${path.extname(bestMatch.image).substring(1)}`;
+            
+            return {
+                data: imageData.toString('base64'),
+                mimeType: mimeType,
+                filename: bestMatch.image
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error('Error in getRelevantImage:', error);
+        return null;
+    }
+}
+
+// Modify generateResponseOpenAI function to handle image responses better
+async function generateResponseOpenAI(assistant, senderNumber, userMessage, assistantKey, retryCount = 0) {
+    const MAX_RETRIES = 2;
+    let threadId;
+    
+    try {
+        if (!userMessage) {
+            throw new Error('Empty message received.');
+        }
+
+        console.log(`[OpenAI] Processing message from ${senderNumber}: ${userMessage}`);
+
+        if (userThreads[senderNumber]) {
+            threadId = userThreads[senderNumber];
+            console.log(`[OpenAI] Using existing thread: ${threadId}`);
+        } else {
+            const chat = await assistant.beta.threads.create();
+            threadId = chat.id;
+            userThreads[senderNumber] = threadId;
+            console.log(`[OpenAI] Created new thread: ${threadId}`);
+        }
+
+        await assistant.beta.threads.messages.create(threadId, {
+            role: 'user',
+            content: userMessage
+        });
+        console.log(`[OpenAI] Added user message to thread`);
+
+        const run = await assistant.beta.threads.runs.create(threadId, {
+            assistant_id: assistantKey,
+            tools: [{
+                type: "function",
+                function: {
+                    name: "getRelevantImage",
+                    description: "Get a relevant image from the pics folder based on the query",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            query: {
+                                type: "string",
+                                description: "The search query to find a relevant image"
+                            }
+                        },
+                        required: ["query"]
+                    }
+                }
+            }]
+        });
+        console.log(`[OpenAI] Created run: ${run.id}`);
+
+        const startTime = Date.now();
+        const timeout = 30000;
+        const maxQueuedTime = 10000; // 10 seconds max wait for queued state
+        let queuedStartTime = null;
+
+        while (true) {
+            if (Date.now() - startTime > timeout) {
+                throw new Error("Request timed out");
+            }
+
+            const runStatus = await assistant.beta.threads.runs.retrieve(threadId, run.id);
+            console.log(`[OpenAI] Run status: ${runStatus.status}`);
+
+            if (runStatus.status === 'completed') {
+                break;
+            } else if (runStatus.status === 'requires_action') {
+                console.log(`[OpenAI] Function calling required`);
+                const toolCalls = runStatus.required_action.submit_tool_outputs.tool_calls;
+                const toolOutputs = [];
+
+                for (const toolCall of toolCalls) {
+                    const functionName = toolCall.function.name;
+                    const args = JSON.parse(toolCall.function.arguments);
+                    console.log(`[OpenAI] Calling function: ${functionName} with args:`, args);
+
+                    let result;
+                    if (functionName === 'getRelevantImage') {
+                        result = await getRelevantImage(args.query);
+                    } else {
+                        const func = module.exports[functionName];
+                        if (typeof func === 'function') {
+                            result = await func(args.query);
+                        }
+                    }
+
+                    if (result && result.data && result.mimeType) {
+                        // Store the image data in a temporary object linked to the thread
+                        if (!global.pendingImages) global.pendingImages = {};
+                        if (!global.pendingImages[threadId]) global.pendingImages[threadId] = [];
+                        
+                        global.pendingImages[threadId].push(result);
+                        console.log(`[OpenAI] Image found and stored for later sending`);
+                        
+                        // Send a simple success message to OpenAI
+                        toolOutputs.push({
+                            tool_call_id: toolCall.id,
+                            output: "Image found successfully"
+                        });
+                    } else {
+                        toolOutputs.push({
+                            tool_call_id: toolCall.id,
+                            output: result ? result.toString() : `No result from ${functionName}`
+                        });
+                    }
+                }
+
+                await assistant.beta.threads.runs.submitToolOutputs(
+                    threadId,
+                    run.id,
+                    { tool_outputs: toolOutputs }
+                );
+                console.log(`[OpenAI] Submitted tool outputs`);
+            } else if (runStatus.status === 'failed' || runStatus.status === 'cancelled') {
+                throw new Error(`Run ${run.id} ${runStatus.status}`);
+            } else if (runStatus.status === 'queued') {
+                // Track how long we've been in queued state
+                if (!queuedStartTime) {
+                    queuedStartTime = Date.now();
+                } else if (Date.now() - queuedStartTime > maxQueuedTime) {
+                    // If queued for too long, cancel the run and try again
+                    try {
+                        await assistant.beta.threads.runs.cancel(threadId, run.id);
+                    } catch (cancelError) {
+                        console.error('[OpenAI] Error cancelling run:', cancelError);
+                    }
+                    throw new Error("Request was queued for too long");
+                }
+            } else {
+                // Reset queued timer for other states
+                queuedStartTime = null;
+            }
+
+            // Adjust sleep time based on status
+            const sleepTime = runStatus.status === 'queued' ? 2000 : 1000;
+            await sleep(sleepTime);
+        }
+
+        const messages = await assistant.beta.threads.messages.list(threadId);
+        const latestMessage = messages.data[0];
+        console.log(`[OpenAI] Retrieved latest message`);
+
+        let response = '';
+        if (latestMessage.content && latestMessage.content.length > 0) {
+            for (const content of latestMessage.content) {
+                if (content.type === 'text') {
+                    response += content.text.value.trim() + ' ';
+                }
+            }
+        }
+
+        // Return both the text response and any pending images
+        return {
+            text: response.trim() || "I'm sorry, I couldn't generate a response.",
+            images: global.pendingImages?.[threadId] || []
+        };
+
+    } catch (error) {
+        console.error(`[OpenAI] Error in generateResponseOpenAI (attempt ${retryCount + 1}):`, error);
+        
+        // Retry logic for specific errors
+        if (retryCount < MAX_RETRIES && 
+            (error.message.includes("queued for too long") || 
+             error.message.includes("Request timed out"))) {
+            console.log(`[OpenAI] Retrying request (attempt ${retryCount + 1})`);
+            return generateResponseOpenAI(assistant, senderNumber, userMessage, assistantKey, retryCount + 1);
+        }
+        
+        // Error responses based on the type of error
+        if (error.message.includes("queued for too long")) {
+            return {
+                text: "I'm experiencing high traffic right now. Please try again in a few moments.",
+                images: []
+            };
+        }
+        
+        return {
+            text: "Sorry, something went wrong while processing your request. Please try again.",
+            images: []
+        };
+    } finally {
+        // Clean up stored images only if we have a threadId
+        if (threadId && global.pendingImages?.[threadId]) {
+            delete global.pendingImages[threadId];
+        }
+    }
+}
+
 module.exports = {
     showMenu,
     parseTimeString,
@@ -531,4 +754,5 @@ module.exports = {
     isIgnored,
     addToIgnoreList,
     removeFromIgnoreList,
+    getRelevantImage,
 };
