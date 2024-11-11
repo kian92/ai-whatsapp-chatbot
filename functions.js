@@ -12,6 +12,7 @@ const FormData = require('form-data');
 const { MessageMedia } = require('whatsapp-web.js');
 const path = require('path');
 const OpenAI = require('openai');
+const sheetsService = require('./sheetsService');
 
 const userMessageQueues = {};
 const userProcessingTimers = {};
@@ -548,7 +549,21 @@ async function getRelevantImage(query) {
     }
 }
 
-// Modify generateResponseOpenAI function to handle image responses better
+async function appendUserToSheet(name, phoneNumber) {
+    try {
+        const exists = await sheetsService.checkIfPhoneExists(phoneNumber);
+        if (!exists) {
+            const success = await sheetsService.appendUserData(name, phoneNumber);
+            return success ? "User data added to sheet successfully" : "Failed to add user data";
+        }
+        return "Phone number already exists in the sheet";
+    } catch (error) {
+        console.error('[Sheets] Error in appendUserToSheet:', error);
+        return "Error processing user data";
+    }
+}
+
+// Modify the generateResponseOpenAI function to handle image responses better
 async function generateResponseOpenAI(assistant, senderNumber, userMessage, assistantKey, retryCount = 0) {
     const MAX_RETRIES = 2;
     let threadId;
@@ -582,16 +597,37 @@ async function generateResponseOpenAI(assistant, senderNumber, userMessage, assi
                 type: "function",
                 function: {
                     name: "getRelevantImage",
-                    description: "Get a relevant image from the pics folder based on the query",
+                    description: "Get a relevant image from the pics folder based on the query (e.g We are 3 people,3,4, I want to go to tibet, or when the first time tibet is discuessed in any way",
                     parameters: {
                         type: "object",
                         properties: {
                             query: {
                                 type: "string",
-                                description: "The search query to find a relevant image"
+                                description: "The search query to find a relevant image based on context or the place or anything related, (Get a relevant image from the pics folder based on the query (e.g We are 3 people,3,4, I want to go to tibet, or when the first time tibet is discuessed in any way )"
                             }
                         },
                         required: ["query"]
+                    }
+                }
+            },
+            {
+                type: "function",
+                function: {
+                    name: "appendUserToSheet",
+                    description: "Append user data to Google Sheet",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            name: {
+                                type: "string",
+                                description: "User's name to be added"
+                            },
+                            phoneNumber: {
+                                type: "string",
+                                description: "User's phone number"
+                            }
+                        },
+                        required: ["name", "phoneNumber"]
                     }
                 }
             }]
@@ -626,6 +662,8 @@ async function generateResponseOpenAI(assistant, senderNumber, userMessage, assi
                     let result;
                     if (functionName === 'getRelevantImage') {
                         result = await getRelevantImage(args.query);
+                    } else if (functionName === 'appendUserToSheet') {
+                        result = await appendUserToSheet(args.name, args.phoneNumber);
                     } else {
                         const func = module.exports[functionName];
                         if (typeof func === 'function') {
@@ -755,4 +793,5 @@ module.exports = {
     addToIgnoreList,
     removeFromIgnoreList,
     getRelevantImage,
+    appendUserToSheet,
 };

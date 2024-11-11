@@ -14,3 +14,7 @@ Thumbs.db
 
 # whatapp-web.js
 .wwebjs_*
+
+# Python virtual environments
+venv/
+env/

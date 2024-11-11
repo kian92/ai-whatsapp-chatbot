@@ -9,7 +9,7 @@ import shutil
 import time
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'  # Replace with a strong secret key
+app.secret_key = 'hgfdsdfghjhgfdrty5434567uyt56uhgfrt6y78765432ertyj'  # Replace with a strong secret key
 logging.basicConfig(level=logging.DEBUG)
 
 # Add these global variables at the top level

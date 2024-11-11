@@ -1,0 +1,13 @@
+{
+    "type": "service_account",
+    "project_id": "the-wandering-lens",
+    "private_key_id": "58ded3e15617fd87c2d37455bf8f2842da9d8a4e",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCwRpifAO5YDnXL\no74eEZwy7ESRU+jbd5XUYPXbfTfE+4FMINxCH9GPUqKHyarQFUXJ5Y1K7hwqp2A4\nPHAZ3Qd44PF4xsn+8gpcC2fmkjoR0sdjJ0b7L23FsfLzjeOQ9CoTbt1dL56S2CE1\ncUlPOuJQmoYGzUgLr1vDi7CoyPGLVYMvKerztwmwMOwtohszqq5+KiolmVcKx0kZ\n6/TjUufqBrMnbQW/wnjza6SPpD6Ui3fnP0JAsLMiRSAeiK8IwouKnZRgfzzUKAzy\nvQoa2EoahMxCkfwzTMGNzww3XLjuXPtp0HYwjArgx4W2GvbgXSnSadU40Ueb1Do+\nQqyCQ1iPAgMBAAECggEARg0IAcgg76Vvcmmz18cvx5zU8tvhobW4ORn/GiZ8zy8T\nhulYHn7+jHJOXJ/r3Z1WipFKwQg28UxqlG6QLfcETSk3TMPS6hnNvB5cP+jEYujc\ni67EKnYCrZm17svoL2aYgfiAx9NwtPJm4BIRDAdegKGnuXRCuUIKuX79yVVxh+je\nylLf4Yum8+wuP+AuLUdEPEJ5C5bLv7wMmndaMsm++vgrHUoXrGplgTQ4oMLP13E0\n1EzcmnhuA4j8peI+vrCLbUjYB/H8GzUg4EA1omYY4W6rWuyihfK+WPpIw68irnIp\nQ8zvtX6SZII3IrSHQWN1nLkXbRGPWa91x76eIMN/4QKBgQDXSAyaQHmhXwMnGmOf\ne4yiOnfMOcX0adNM2OhY3mtTxiLbL1d+GrmDKs6OiWLX21jsxBSgLiklXX2wC0oe\nbbTLAZ6BnqZmlnO+hEpYLEmOSNnU8ky+Rgl1g2vE9MTWRjIB+TVqbNbMrvP2rpK+\nh99Cgs7lS8Rc4qU/NrWhnuKcwwKBgQDRneNMpXGd834JNn0OtxS28ukp2ALPM0wD\n5XFW9KChqJjN46qJMVdDSJO1179o5zB0/IoguPPo3natOdOI7fF2KqtuSC1Uty9f\nApZ+yvAhsmAEoHCslPEoniOQ4i+1YuGSA5gkKDjNZm2SNIPqR8tUpxnGnupuSgDx\nwhx+7AMIRQKBgQCv3Atvdnvldtf8eXIoNaUMYPa7vfYXUttpS0eCUS8boB+ZLXMr\ncGla3P0fMturuWNLBmJS92JlQ5oI1TAW60dlDk2NVSxZYU3rs+WHYaY0tQ49BjHq\nvQu9Ez5WBh1FbNItCoa4CXDug3yHZtQ5EIUwr+qTJPGjbwHOQcLd5Az6QQKBgQCa\nODiYFozd8dxDuPQPVIGIDHWhVIzUluARaciWekqIRXuO1zaL02JpXUdXnVD1REqx\nd2/EnW7OYIYd8pKAhteE4eXYsH+xeUj/9O52gKZllE/yd3wObVJ0WMy/9rm1EPf2\nrnBMAc+wxvBMhhib0JB3Sq27JQZDeGzzcaX3d3rPpQKBgHlkoj4BFgMvTsBzUSni\nzHucriRBnrNnSbzJkWPtWjAZtRV1/N8/MEDzAiZUMuct6eQUcfpBg2vw1Tra+9ds\nl0zr+hITHwdNnwus6bK8ik6h+nJn2gmI2RbG9bo8jvHpEgOG/QNatLgT/E8xSEgo\nx7McciTymg0MLIC/gWCgbO9e\n-----END PRIVATE KEY-----\n",
+    "client_email": "wa-chatbot-sender@the-wandering-lens.iam.gserviceaccount.com",
+    "client_id": "111045576335655954661",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/wa-chatbot-sender%40the-wandering-lens.iam.gserviceaccount.com",
+    "universe_domain": "googleapis.com"
+}
