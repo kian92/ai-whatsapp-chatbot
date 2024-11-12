@@ -182,7 +182,7 @@ function checkModerators() {
         return [];
     }
 }
-
+//
 function hasPermission(senderNumber, command, isAdmin, isModerator) {
     const unrestrictedCommands = ['!!un-sub', '!!live-chat', '!!sub', '!!bot'];
     if (unrestrictedCommands.includes(command)) {
