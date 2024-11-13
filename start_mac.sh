@@ -15,11 +15,27 @@ brew install python3
 # Install system dependencies
 brew install \
     atk \
+    atk-devel \
+    at-spi2-atk \
+    cups-libs \
+    dbus-glib \
+    libXcomposite \
+    libXcursor \
+    libXdamage \
+    libXext \
+    libXi \
+    libXrandr \
+    libXScrnSaver \
+    libXtst \
     pango \
-    gtk+3 \
-    libdrm \
+    pango-devel \
     alsa-lib \
-    cups
+    xorg-x11-fonts-Type1 \
+    xorg-x11-utils \
+    libxkbcommon \
+    libdrm \
+    gtk3 \
+    libgbm
 
 # Install Python packages and Node modules
 npm install
